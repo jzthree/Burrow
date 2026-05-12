@@ -665,6 +665,7 @@ struct MenuBarContent: View {
                                         ForEach(Array(group.tunnels.enumerated()), id: \.element.id) { index, tunnel in
                                             if index > 0 {
                                                 Divider()
+                                                    .opacity(0.62)
                                                     .padding(.leading, 28)
                                             }
                                             TunnelRow(
@@ -681,11 +682,11 @@ struct MenuBarContent: View {
                                     }
                                     .background(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(Color(nsColor: .controlBackgroundColor))
+                                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
                                     )
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .stroke(Color.black.opacity(0.035), lineWidth: 1)
+                                            .stroke(Color.black.opacity(0.025), lineWidth: 1)
                                     )
                                 }
                             }
@@ -808,15 +809,18 @@ private struct EndpointHeader: View {
 
     var body: some View {
         HStack(spacing: 7) {
+            Image(systemName: "server.rack")
+                .font(.system(size: 8.5, weight: .semibold))
+                .foregroundStyle(.tertiary)
             Text(verbatim: group.endpoint)
-                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Color.secondary.opacity(0.82))
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)
             EndpointHealthDots(tunnels: group.tunnels)
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 6)
         .padding(.vertical, 2)
     }
 }
@@ -938,17 +942,19 @@ struct TunnelRow: View {
     let onDelete: () -> Void
     let onToggleAutoConnect: (Bool) -> Void
     @State private var isFailureTooltipVisible = false
+    @State private var isIdentityTooltipVisible = false
     @State private var isDetailsPresented = false
 
     var body: some View {
         HStack(alignment: .center, spacing: 9) {
             Circle()
                 .fill(statusColor)
-                .frame(width: 8, height: 8)
+                .frame(width: 7.5, height: 7.5)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(tunnel.tunnel.name)
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .layoutPriority(1)
@@ -956,6 +962,12 @@ struct TunnelRow: View {
                 routeSummaryView
             }
             .layoutPriority(1)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.08)) {
+                    isIdentityTooltipVisible = hovering
+                }
+            }
 
             Spacer(minLength: 8)
 
@@ -965,7 +977,7 @@ struct TunnelRow: View {
                 primaryActionButton
                 rowMenu
             }
-            .frame(width: 194, alignment: .trailing)
+            .frame(width: 210, alignment: .trailing)
             .layoutPriority(2)
         }
         .padding(.horizontal, 10)
@@ -977,7 +989,14 @@ struct TunnelRow: View {
                     .allowsHitTesting(false)
             }
         }
-        .zIndex(isFailureTooltipVisible ? 2 : 0)
+        .overlay(alignment: .topLeading) {
+            if isIdentityTooltipVisible {
+                identityTooltip
+                    .offset(x: 20, y: -12)
+                    .allowsHitTesting(false)
+            }
+        }
+        .zIndex(isFailureTooltipVisible || isIdentityTooltipVisible ? 2 : 0)
     }
 
     private var endpointText: String {
@@ -1002,6 +1021,32 @@ struct TunnelRow: View {
         .joined(separator: "  •  ")
     }
 
+    private var identityTooltip: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(tunnel.tunnel.name)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Text(fullRouteSummary)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .frame(maxWidth: 330, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color(nsColor: .windowBackgroundColor))
+                .shadow(color: .black.opacity(0.14), radius: 8, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+        )
+    }
+
     @ViewBuilder
     private var routeSummaryView: some View {
         if tunnel.tunnel.forwards.count == 1, let forward = tunnel.tunnel.forwards.first {
@@ -1011,7 +1056,7 @@ struct TunnelRow: View {
             Text(verbatim: compactRouteSummary)
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .monospacedDigit()
-                .foregroundStyle(.primary.opacity(0.82))
+                .foregroundStyle(.secondary.opacity(0.95))
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .help(fullRouteSummary)
@@ -1031,7 +1076,7 @@ struct TunnelRow: View {
             }
             .font(.system(size: 12, weight: .medium, design: .monospaced))
             .monospacedDigit()
-            .foregroundStyle(.primary.opacity(0.82))
+            .foregroundStyle(.secondary.opacity(0.95))
             .lineLimit(1)
             .truncationMode(.tail)
         case .remote:
@@ -1044,7 +1089,7 @@ struct TunnelRow: View {
             }
             .font(.system(size: 12, weight: .medium, design: .monospaced))
             .monospacedDigit()
-            .foregroundStyle(.primary.opacity(0.82))
+            .foregroundStyle(.secondary.opacity(0.95))
             .lineLimit(1)
             .truncationMode(.tail)
         case .dynamic:
@@ -1054,7 +1099,7 @@ struct TunnelRow: View {
             }
             .font(.system(size: 12, weight: .medium, design: .monospaced))
             .monospacedDigit()
-            .foregroundStyle(.primary.opacity(0.82))
+            .foregroundStyle(.secondary.opacity(0.95))
             .lineLimit(1)
             .truncationMode(.tail)
         }
@@ -1155,40 +1200,63 @@ struct TunnelRow: View {
         Button {
             onToggleAutoConnect(!tunnel.isConfiguredEnabled)
         } label: {
-            Text("Auto")
-                .font(.system(size: 10.5, weight: .semibold))
-                .frame(width: 48, height: 24)
+            HStack(spacing: 3) {
+                Image(systemName: tunnel.isConfiguredEnabled ? "bolt.fill" : "bolt.slash.fill")
+                    .font(.system(size: 10.5, weight: .semibold))
+                Text("Auto")
+                    .font(.system(size: 10.5, weight: .semibold))
+            }
+                .frame(width: 64, height: 24)
                 .foregroundStyle(tunnel.isConfiguredEnabled ? Color.accentColor : Color.secondary)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(tunnel.isConfiguredEnabled ? Color.accentColor.opacity(0.10) : Color.secondary.opacity(0.08))
+                        .fill(tunnel.isConfiguredEnabled ? Color.accentColor.opacity(0.055) : Color.secondary.opacity(0.055))
                 )
                 .overlay(
                     Capsule(style: .continuous)
-                        .stroke(tunnel.isConfiguredEnabled ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.14), lineWidth: 1)
+                        .stroke(tunnel.isConfiguredEnabled ? Color.accentColor.opacity(0.11) : Color.secondary.opacity(0.10), lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
-        .frame(width: 48, height: 24)
+        .frame(width: 64, height: 24)
         .help(tunnel.isConfiguredEnabled ? "Auto-connect enabled" : "Auto-connect disabled")
     }
 
     @ViewBuilder
     private var primaryActionButton: some View {
         if tunnel.isRunning {
-            Button("Stop") {
+            Button {
                 onStop()
+            } label: {
+                Text("Stop")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 78, height: 26)
+                    .foregroundStyle(Color.red.opacity(0.68))
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.secondary.opacity(0.055))
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(Color.secondary.opacity(0.08), lineWidth: 1)
+                    )
             }
-            .buttonStyle(.bordered)
-            .tint(.red)
-            .controlSize(.small)
+            .buttonStyle(.plain)
             .frame(width: 78, alignment: .trailing)
         } else {
-            Button("Connect") {
+            Button {
                 onStart()
+            } label: {
+                Text("Connect")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 78, height: 26)
+                    .foregroundStyle(.white)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.accentColor)
+                    )
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
+            .buttonStyle(.plain)
             .frame(width: 78, alignment: .trailing)
         }
     }
