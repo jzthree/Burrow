@@ -2,21 +2,23 @@
 
 Burrow is a macOS SSH tunnel manager for people who keep too many terminal tabs open just to babysit port forwards.
 
-It keeps tunnel definitions in one config file, runs them with the system `ssh`, reconnects when sessions drop, and gives you a native menu-bar UI for the day-to-day work: see what is up, restart what failed, and get back to the thing you were actually doing.
+It keeps tunnel definitions in one config file, runs them with the system `ssh`, reconnects when sessions drop, and gives you a native menu-bar UI for the day-to-day work: see what is up, understand what is retrying, restart what failed, and get back to the thing you were actually doing.
 
 <p align="center">
-  <img src="docs/assets/burrow-menu.svg" alt="Burrow menu-bar app showing grouped SSH tunnels, status dots, auto-connect controls, and reconnect actions" width="760">
+  <img src="docs/assets/burrow-menu.svg" alt="Burrow menu-bar app showing grouped SSH tunnels, retry status, auto-connect controls, and the new tunnel editor with autofill" width="880">
 </p>
 
 ## Highlights
 
-- Native macOS menu-bar app with grouped tunnels, status dots, quick reconnect, edit, duplicate, and delete actions.
+- Native macOS menu-bar app with grouped endpoints, status dots, quick reconnect, edit, duplicate, and delete actions.
+- Smart tunnel editor with autofill suggestions from existing hosts, users, SSH ports, identity files, jump hosts, and destination ports.
 - CLI for creating, listing, enabling, disabling, and running tunnels from the terminal.
 - One central JSON config at `~/Library/Application Support/Burrow/config.json`.
-- Auto-connect on launch for enabled tunnels.
+- Auto-connect on launch for enabled tunnels without letting one missing password block the rest.
 - Automatic reconnect when an SSH process exits unexpectedly.
 - Stale process reclamation for Burrow-owned forwards, so old port listeners do not silently block new sessions.
-- Password auth support through macOS Keychain in the menu-bar app, with passwords saved only after a successful connection.
+- Connection status only turns green after the launched SSH process owns the local listener, avoiding misleading false positives from stale ports.
+- Password auth support through macOS Keychain in the menu-bar app, with passwords saved only after a successful connection and legacy PortKeeper credentials reused when available.
 - No custom SSH stack: Burrow builds commands and supervises `/usr/bin/ssh`.
 
 ## Quick Start
@@ -62,10 +64,20 @@ The app sits in the macOS top bar and focuses on operational tunnel work:
 
 - `Connect` or `Stop` individual tunnels.
 - Toggle whether a tunnel auto-connects on launch.
-- Restart failed sessions.
+- Let enabled tunnels keep retrying across VPN, DNS, or network changes.
+- See retrying or failed sessions without marking them connected until the local forward is actually owned by the SSH process Burrow launched.
 - Inspect details, recent logs, and the generated SSH command.
 - Edit, duplicate, or delete saved tunnel configs.
 - Reload the config after CLI edits.
+
+## New Tunnel Editor
+
+The editor keeps the common path short:
+
+- Visible by default: tunnel name, SSH host, user, SSH port, local port, destination host, and destination port.
+- Hidden behind `Advanced SSH settings`: identity file, jump host, keepalive, reconnect delay, bind address, remote/dynamic forwarding, and raw SSH options.
+- `Autofill` uses the host you entered to copy likely values from existing tunnels, preferring exact host/port matches for usernames and host/user matches for identity files.
+- New tunnels suggest the next unused local port and common destination ports such as `3000` or `8888`.
 
 Install it as a stable app bundle:
 
@@ -160,7 +172,7 @@ BURROW_CONFIG=/path/to/config.json burrow list
 
 Burrow is split into a shared Swift core and two thin frontends:
 
-- `PortKeeperCore` owns config parsing, SSH command construction, stale process cleanup, and process supervision.
+- `PortKeeperCore` owns config parsing, SSH command construction, stale process cleanup, local-forward readiness checks, and process supervision.
 - `burrow` is the CLI entrypoint.
 - `BurrowApp` is the SwiftUI menu-bar app.
 
