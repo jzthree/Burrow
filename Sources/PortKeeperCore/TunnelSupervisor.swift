@@ -205,12 +205,12 @@ public final class TunnelSupervisor: @unchecked Sendable {
         let deadline = Date().addingTimeInterval(TimeInterval(max(tunnel.serverAliveInterval, 10)))
         let stableDuration: TimeInterval = 1.0
         while process.isRunning && Date() < deadline {
-            if probeTargets.contains(where: { canConnect(host: $0.0, port: $0.1) }) {
+            if probeTargets.contains(where: { processOwnsListener(process, port: $0.1) && canConnect(host: $0.0, port: $0.1) }) {
                 let stableUntil = Date().addingTimeInterval(stableDuration)
                 var remainedHealthy = true
 
                 while process.isRunning && Date() < stableUntil {
-                    if !probeTargets.contains(where: { canConnect(host: $0.0, port: $0.1) }) {
+                    if !probeTargets.contains(where: { processOwnsListener(process, port: $0.1) && canConnect(host: $0.0, port: $0.1) }) {
                         remainedHealthy = false
                         break
                     }
@@ -225,6 +225,33 @@ public final class TunnelSupervisor: @unchecked Sendable {
         }
 
         return false
+    }
+
+    private func processOwnsListener(_ process: Process, port: Int) -> Bool {
+        guard process.isRunning else {
+            return false
+        }
+
+        let lsof = Process()
+        lsof.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        lsof.arguments = [
+            "-nP",
+            "-a",
+            "-p", "\(process.processIdentifier)",
+            "-iTCP:\(port)",
+            "-sTCP:LISTEN",
+        ]
+        lsof.standardOutput = Pipe()
+        lsof.standardError = Pipe()
+
+        do {
+            try lsof.run()
+            lsof.waitUntilExit()
+            return lsof.terminationStatus == 0
+        } catch {
+            // Fall back to the older reachability probe if lsof is unavailable.
+            return true
+        }
     }
 
     private func normalizedProbeHost(_ host: String?) -> String {

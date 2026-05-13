@@ -10,36 +10,39 @@ public enum PortKeeperRuntimeRegistry {
         runtimeDirectory: URL? = nil
     ) throws {
         let pidFileURL = try pidFileURL(for: tunnel.name, fileManager: fileManager, runtimeDirectory: runtimeDirectory)
-        guard fileManager.fileExists(atPath: pidFileURL.path) else {
-            return
-        }
+        if fileManager.fileExists(atPath: pidFileURL.path) {
+            let recordedPID = try readPID(from: pidFileURL)
+            guard recordedPID > 0, recordedPID != getpid() else {
+                try? fileManager.removeItem(at: pidFileURL)
+                try reclaimOwnedForwardProcesses(for: tunnel, executablePath: executablePath, logger: logger)
+                return
+            }
 
-        let recordedPID = try readPID(from: pidFileURL)
-        guard recordedPID > 0, recordedPID != getpid() else {
+            guard processExists(recordedPID) else {
+                try? fileManager.removeItem(at: pidFileURL)
+                try reclaimOwnedForwardProcesses(for: tunnel, executablePath: executablePath, logger: logger)
+                return
+            }
+
+            guard let command = processCommand(for: recordedPID),
+                  commandLooksOwned(command, tunnel: tunnel, executablePath: executablePath) else {
+                try? fileManager.removeItem(at: pidFileURL)
+                try reclaimOwnedForwardProcesses(for: tunnel, executablePath: executablePath, logger: logger)
+                return
+            }
+
+            logger?("[\(tunnel.name)] reclaiming stale ssh process \(recordedPID).")
+            kill(recordedPID, SIGTERM)
+            waitForExit(of: recordedPID, timeout: 2.0)
+            if processExists(recordedPID) {
+                kill(recordedPID, SIGKILL)
+                waitForExit(of: recordedPID, timeout: 1.0)
+            }
+
             try? fileManager.removeItem(at: pidFileURL)
-            return
         }
 
-        guard processExists(recordedPID) else {
-            try? fileManager.removeItem(at: pidFileURL)
-            return
-        }
-
-        guard let command = processCommand(for: recordedPID),
-              commandLooksOwned(command, tunnel: tunnel, executablePath: executablePath) else {
-            try? fileManager.removeItem(at: pidFileURL)
-            return
-        }
-
-        logger?("[\(tunnel.name)] reclaiming stale ssh process \(recordedPID).")
-        kill(recordedPID, SIGTERM)
-        waitForExit(of: recordedPID, timeout: 2.0)
-        if processExists(recordedPID) {
-            kill(recordedPID, SIGKILL)
-            waitForExit(of: recordedPID, timeout: 1.0)
-        }
-
-        try? fileManager.removeItem(at: pidFileURL)
+        try reclaimOwnedForwardProcesses(for: tunnel, executablePath: executablePath, logger: logger)
     }
 
     public static func recordProcess(
@@ -133,17 +136,103 @@ public enum PortKeeperRuntimeRegistry {
         }
     }
 
+    private static func reclaimOwnedForwardProcesses(
+        for tunnel: TunnelConfig,
+        executablePath: String,
+        logger: ((String) -> Void)?
+    ) throws {
+        for (pid, command) in processTable() {
+            guard pid > 0, pid != getpid(), processExists(pid) else {
+                continue
+            }
+            guard commandLooksOwned(command, tunnel: tunnel, executablePath: executablePath) else {
+                continue
+            }
+
+            logger?("[\(tunnel.name)] reclaiming stale ssh process \(pid) by command match.")
+            kill(pid, SIGTERM)
+            waitForExit(of: pid, timeout: 2.0)
+            if processExists(pid) {
+                kill(pid, SIGKILL)
+                waitForExit(of: pid, timeout: 1.0)
+            }
+        }
+    }
+
+    private static func processTable() -> [(pid: pid_t, command: String)] {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-axo", "pid=,command="]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else {
+                return []
+            }
+
+            guard let output = String(data: data, encoding: .utf8) else {
+                return []
+            }
+
+            return output.split(whereSeparator: \.isNewline).compactMap { line -> (pid_t, String)? in
+                let rawLine = String(line).trimmingCharacters(in: .whitespaces)
+                guard let separator = rawLine.firstIndex(where: \.isWhitespace) else {
+                    return nil
+                }
+                let rawPID = String(rawLine[..<separator])
+                guard let pid = pid_t(rawPID) else {
+                    return nil
+                }
+                let command = String(rawLine[separator...]).trimmingCharacters(in: .whitespaces)
+                return (pid, command)
+            }
+        } catch {
+            return []
+        }
+    }
+
     private static func commandLooksOwned(_ command: String, tunnel: TunnelConfig, executablePath: String) -> Bool {
         let remoteTarget = tunnel.user.map { "\($0)@\(tunnel.host)" } ?? tunnel.host
         let ownershipFragments = [
             executablePath,
             remoteTarget,
             "-p \(tunnel.sshPort)",
+            "ExitOnForwardFailure=yes",
             "UserKnownHostsFile=",
-            "\(tunnel.name).known_hosts",
         ]
 
-        return ownershipFragments.allSatisfy { command.contains($0) }
+        guard ownershipFragments.allSatisfy({ command.contains($0) }) else {
+            return false
+        }
+
+        return tunnel.forwards.contains { forward in
+            command.contains(forwardOwnershipFragment(forward))
+        }
+    }
+
+    private static func forwardOwnershipFragment(_ forward: ForwardSpec) -> String {
+        let bindPrefix = forward.bindAddress.map { "\($0):" } ?? ""
+        switch forward.kind {
+        case .local:
+            guard let destinationHost = forward.destinationHost,
+                  let destinationPort = forward.destinationPort else {
+                return "-L \(bindPrefix)\(forward.listenPort):"
+            }
+            return "-L \(bindPrefix)\(forward.listenPort):\(destinationHost):\(destinationPort)"
+        case .remote:
+            guard let destinationHost = forward.destinationHost,
+                  let destinationPort = forward.destinationPort else {
+                return "-R \(bindPrefix)\(forward.listenPort):"
+            }
+            return "-R \(bindPrefix)\(forward.listenPort):\(destinationHost):\(destinationPort)"
+        case .dynamic:
+            return "-D \(bindPrefix)\(forward.listenPort)"
+        }
     }
 
     private static func waitForExit(of pid: pid_t, timeout: TimeInterval) {

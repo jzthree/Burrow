@@ -28,8 +28,17 @@ if [ -d "$APP_DIR" ]; then
   RUNNING_PID="$(pgrep -f "$APP_DIR/Contents/MacOS/${EXECUTABLE_NAME}" || true)"
   if [ -n "$RUNNING_PID" ]; then
     echo "Stopping running ${APP_NAME} app..."
-    kill $RUNNING_PID || true
-    sleep 1
+    /usr/bin/osascript -e "tell application id \"${BUNDLE_ID}\" to quit" >/dev/null 2>&1 || true
+    for _ in {1..20}; do
+      RUNNING_PID="$(pgrep -f "$APP_DIR/Contents/MacOS/${EXECUTABLE_NAME}" || true)"
+      [ -z "$RUNNING_PID" ] && break
+      sleep 0.2
+    done
+    RUNNING_PID="$(pgrep -f "$APP_DIR/Contents/MacOS/${EXECUTABLE_NAME}" || true)"
+    if [ -n "$RUNNING_PID" ]; then
+      kill $RUNNING_PID || true
+      sleep 1
+    fi
   fi
   rm -rf "$APP_DIR"
 fi

@@ -44,7 +44,9 @@ public enum SSHCommandBuilder {
     }
 
     public static func render(_ tunnel: TunnelConfig) -> String {
-        (["/usr/bin/ssh"] + buildArguments(for: tunnel)).joined(separator: " ")
+        (["/usr/bin/ssh"] + buildArguments(for: tunnel))
+            .map(shellQuote)
+            .joined(separator: " ")
     }
 
     private static func remoteTarget(for tunnel: TunnelConfig) -> String {
@@ -74,12 +76,20 @@ public enum SSHCommandBuilder {
         }
 
         let key = String(option[..<separatorIndex])
-        let rawValue = String(option[option.index(after: separatorIndex)...])
-        let escapedValue = rawValue
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: " ", with: "\\ ")
-            .replacingOccurrences(of: "\t", with: "\\\t")
+        let value = String(option[option.index(after: separatorIndex)...])
+        return "\(key)=\(value)"
+    }
 
-        return "\(key)=\(escapedValue)"
+    private static func shellQuote(_ argument: String) -> String {
+        guard !argument.isEmpty else {
+            return "''"
+        }
+
+        let safeCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+-./:=,@%")
+        if argument.unicodeScalars.allSatisfy({ safeCharacters.contains($0) }) {
+            return argument
+        }
+
+        return "'\(argument.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 }

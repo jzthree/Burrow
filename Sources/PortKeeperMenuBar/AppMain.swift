@@ -6,19 +6,28 @@ import SwiftUI
 @main
 struct BurrowApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var viewModel = MenuBarViewModel()
+    private let viewModel = MenuBarViewModel()
 
     var body: some Scene {
         MenuBarExtra {
             MenuBarContent(viewModel: viewModel)
-                .frame(width: 420, height: 520)
+                .frame(width: 450, height: 560)
         } label: {
-            Label(viewModel.menuBarTitle, systemImage: viewModel.menuBarSymbol)
+            MenuBarLabel(viewModel: viewModel)
         }
         .menuBarExtraStyle(.window)
     }
 }
 
+private struct MenuBarLabel: View {
+    @ObservedObject var viewModel: MenuBarViewModel
+
+    var body: some View {
+        Label(viewModel.menuBarTitle, systemImage: viewModel.menuBarSymbol)
+    }
+}
+
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -65,6 +74,10 @@ final class MenuBarViewModel: ObservableObject {
 
     init() {
         loadConfig()
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            self?.startEnabledTunnelsIfNeeded()
+        }
         NotificationCenter.default.addObserver(
             forName: .portKeeperDidFinishLaunching,
             object: nil,
@@ -72,6 +85,15 @@ final class MenuBarViewModel: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.startEnabledTunnelsIfNeeded()
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.stopAll()
             }
         }
     }
@@ -131,7 +153,7 @@ final class MenuBarViewModel: ObservableObject {
 
     func startEnabledTunnels() {
         for tunnel in tunnels where tunnel.isConfiguredEnabled {
-            startTunnel(named: tunnel.id)
+            startTunnel(named: tunnel.id, allowPasswordPrompt: false)
         }
     }
 
@@ -160,7 +182,7 @@ final class MenuBarViewModel: ObservableObject {
         startTunnel(named: name)
     }
 
-    func startTunnel(named name: String) {
+    func startTunnel(named name: String, allowPasswordPrompt: Bool = true) {
         guard tasks[name] == nil else {
             updateState(for: name, isRunning: true, message: "Already running")
             return
@@ -181,7 +203,7 @@ final class MenuBarViewModel: ObservableObject {
 
         let preparation: ConnectionPreparation
         do {
-            preparation = try connectionPreparation(for: launchTunnel)
+            preparation = try connectionPreparation(for: launchTunnel, allowPasswordPrompt: allowPasswordPrompt)
         } catch {
             updateState(for: name, isRunning: false, state: .failed, message: "Password setup failed: \(error.localizedDescription)")
             globalMessage = "Failed to prepare credentials for \(name)."
@@ -198,7 +220,7 @@ final class MenuBarViewModel: ObservableObject {
 
         updateState(for: name, isRunning: true, state: .connecting, message: "Connecting")
         let bridge = TunnelEventBridge(owner: self, tunnelName: name)
-        let task = Task {
+        let task = Task.detached(priority: .userInitiated) {
             let supervisor = TunnelSupervisor(
                 tunnel: launchTunnel,
                 logger: { message in
@@ -310,7 +332,7 @@ final class MenuBarViewModel: ObservableObject {
     }
 
     func createTunnel() {
-        editorDraft = TunnelDraft.newTunnel()
+        editorDraft = TunnelDraft.newTunnel(from: tunnels.map(\.tunnel))
     }
 
     func closeEditor() {
@@ -382,7 +404,7 @@ final class MenuBarViewModel: ObservableObject {
         NSApp.terminate(nil)
     }
 
-    private func connectionPreparation(for tunnel: TunnelConfig) throws -> ConnectionPreparation {
+    private func connectionPreparation(for tunnel: TunnelConfig, allowPasswordPrompt: Bool) throws -> ConnectionPreparation {
         guard let credentialKey = TunnelCredentialKey(tunnel: tunnel) else {
             return ConnectionPreparation(environment: [:], pendingSave: nil, credentialSource: .none)
         }
@@ -420,6 +442,10 @@ final class MenuBarViewModel: ObservableObject {
                     credentialSource: .prompted(credentialKey)
                 )
             }
+        }
+
+        guard allowPasswordPrompt else {
+            throw ConnectionPreparationError.missingSavedPassword(credentialKey.account)
         }
 
         guard let password = PasswordPrompt.requestPassword(
@@ -612,11 +638,11 @@ final class TunnelEventBridge: @unchecked Sendable {
                 self.owner?.updateState(for: self.tunnelName, isRunning: false, state: .failed, message: "Authentication failed: \(message)")
                 self.owner?.globalMessage = "\(self.tunnelName): authentication failed. \(message)"
             case .exited(let code):
-                self.owner?.updateState(for: self.tunnelName, isRunning: false, state: .failed, message: "Disconnected (exit \(code))")
-                self.owner?.globalMessage = "\(self.tunnelName): ssh exited with code \(code)."
+                self.owner?.updateState(for: self.tunnelName, isRunning: true, state: .failed, message: "ssh exited \(code); retrying")
+                self.owner?.globalMessage = "\(self.tunnelName): ssh exited with code \(code). Retrying."
             case .failedToStart(let message):
-                self.owner?.updateState(for: self.tunnelName, isRunning: false, state: .failed, message: "Connect failed: \(message)")
-                self.owner?.globalMessage = "\(self.tunnelName): \(message)"
+                self.owner?.updateState(for: self.tunnelName, isRunning: true, state: .failed, message: "Connect failed; retrying: \(message)")
+                self.owner?.globalMessage = "\(self.tunnelName): \(message). Retrying."
             case .log:
                 break
             }
@@ -641,32 +667,38 @@ struct MenuBarContent: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             header
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
             Divider()
             if let draft = viewModel.editorDraft {
                 TunnelEditorSheet(
                     draft: binding(for: draft),
+                    suggestions: TunnelEditorSuggestions(tunnels: viewModel.tunnels.map(\.tunnel)),
                     onCancel: { viewModel.closeEditor() },
                     onSave: { viewModel.saveEditor() },
                     onDelete: { viewModel.deleteEditorTunnel() }
                 )
+                .padding(12)
             } else {
                 if viewModel.tunnels.isEmpty {
                     emptyState
+                        .padding(16)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 10) {
                             ForEach(endpointGroups) { group in
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(alignment: .leading, spacing: 5) {
                                     EndpointHeader(group: group)
 
                                     VStack(alignment: .leading, spacing: 0) {
                                         ForEach(Array(group.tunnels.enumerated()), id: \.element.id) { index, tunnel in
                                             if index > 0 {
                                                 Divider()
-                                                    .opacity(0.62)
-                                                    .padding(.leading, 28)
+                                                    .opacity(0.34)
+                                                    .padding(.leading, 42)
                                             }
                                             TunnelRow(
                                                 tunnel: tunnel,
@@ -681,31 +713,35 @@ struct MenuBarContent: View {
                                         }
                                     }
                                     .background(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.54))
                                     )
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .stroke(Color.black.opacity(0.025), lineWidth: 1)
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .stroke(Color.black.opacity(0.035), lineWidth: 1)
                                     )
+                                    .shadow(color: Color.black.opacity(0.045), radius: 6, x: 0, y: 3)
                                 }
                             }
                         }
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
                 Divider()
                 footer
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color(nsColor: .controlBackgroundColor).opacity(0.42))
             }
         }
-        .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack {
                 if viewModel.editorDraft != nil {
                     Button("Back") {
@@ -715,7 +751,8 @@ struct MenuBarContent: View {
                     .controlSize(.small)
                 } else {
                     Text("Burrow")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 20, weight: .bold))
+                        .tracking(-0.45)
                 }
                 Spacer()
                 if viewModel.editorDraft == nil {
@@ -725,8 +762,8 @@ struct MenuBarContent: View {
                 }
             }
             Text(viewModel.globalMessage)
-                .font(.system(size: 10.5))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 11.2, weight: .semibold))
+                .foregroundStyle(.secondary.opacity(0.86))
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -743,7 +780,7 @@ struct MenuBarContent: View {
     }
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Button {
                     viewModel.startEnabledTunnels()
@@ -762,6 +799,7 @@ struct MenuBarContent: View {
                     Label("New Tunnel", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.black)
             }
 
             HStack(spacing: 8) {
@@ -808,20 +846,27 @@ private struct EndpointHeader: View {
     let group: MenuBarContent.EndpointGroup
 
     var body: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "server.rack")
-                .font(.system(size: 8.5, weight: .semibold))
-                .foregroundStyle(.tertiary)
+        HStack(spacing: 8) {
+            Image(systemName: "terminal")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(.secondary.opacity(0.64))
+                .frame(width: 17, height: 17)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.secondary.opacity(0.055))
+                )
             Text(verbatim: group.endpoint)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundStyle(Color.secondary.opacity(0.82))
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .tracking(0.15)
+                .foregroundStyle(Color.secondary.opacity(0.62))
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)
             EndpointHealthDots(tunnels: group.tunnels)
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 1)
+        .help(group.endpoint)
     }
 }
 
@@ -829,7 +874,7 @@ private struct EndpointHealthDots: View {
     let tunnels: [MenuBarViewModel.TunnelState]
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             if connectedCount > 0 {
                 dot(.green)
             }
@@ -840,16 +885,22 @@ private struct EndpointHealthDots: View {
                 dot(.red)
             }
             Text("\(tunnels.count)")
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.secondary.opacity(0.72))
         }
+        .padding(.horizontal, 7)
+        .frame(height: 20)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.secondary.opacity(0.055))
+        )
         .help("\(connectedCount) up, \(connectingCount) starting, \(failedCount) failed, \(waitingCount) waiting")
     }
 
     private func dot(_ color: Color) -> some View {
         Circle()
             .fill(color)
-            .frame(width: 5, height: 5)
+            .frame(width: 4.5, height: 4.5)
     }
 
     private var connectedCount: Int {
@@ -890,17 +941,11 @@ private struct HealthSummaryPill: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            summaryText(count: upCount, color: .green)
-            summaryText(count: connectingCount, color: .orange)
-            summaryText(count: failedCount, color: .red)
-            summaryText(count: waitingCount, color: .gray)
+            summaryBadge(count: upCount, color: .green)
+            summaryBadge(count: connectingCount, color: .orange)
+            summaryBadge(count: failedCount, color: .red)
+            summaryBadge(count: waitingCount, color: .gray)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            Capsule(style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
         .help("\(upCount) up, \(connectingCount) starting, \(failedCount) failed, \(waitingCount) waiting")
     }
 
@@ -920,15 +965,33 @@ private struct HealthSummaryPill: View {
         tunnels.filter { $0.connectionState == .disconnected }.count
     }
 
-    private func summaryText(count: Int, color: Color) -> some View {
-        HStack(spacing: 3.5) {
+    private func summaryBadge(count: Int, color: Color) -> some View {
+        HStack(spacing: 5) {
             Circle()
                 .fill(color)
                 .frame(width: 5.5, height: 5.5)
             Text("\(count)")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundStyle(color.opacity(0.82))
         }
+        .padding(.horizontal, 8)
+        .frame(height: 24)
+        .background(
+            Capsule(style: .continuous)
+                .fill(color.opacity(0.10))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(color.opacity(0.10), lineWidth: 1)
+        )
+    }
+}
+
+private struct CompactPressButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.965 : 1.0)
+            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
 }
 
@@ -944,17 +1007,18 @@ struct TunnelRow: View {
     @State private var isFailureTooltipVisible = false
     @State private var isIdentityTooltipVisible = false
     @State private var isDetailsPresented = false
+    @State private var isAutoHovered = false
+    @State private var isPrimaryHovered = false
+    @State private var isMenuHovered = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 9) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 7.5, height: 7.5)
+        HStack(alignment: .center, spacing: 10) {
+            statusIndicator
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(tunnel.tunnel.name)
-                    .font(.system(size: 13.5, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 13.4, weight: .bold))
+                    .foregroundStyle(.primary.opacity(0.92))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .layoutPriority(1)
@@ -968,35 +1032,34 @@ struct TunnelRow: View {
                     isIdentityTooltipVisible = hovering
                 }
             }
+            .popover(isPresented: $isIdentityTooltipVisible, arrowEdge: .top) {
+                identityTooltip
+            }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: 6)
 
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 failureInfoSlot
                 autoConnectButton
                 primaryActionButton
                 rowMenu
             }
-            .frame(width: 210, alignment: .trailing)
+            .frame(width: 183, alignment: .trailing)
             .layoutPriority(2)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .overlay(alignment: .topTrailing) {
-            if let presentation = failurePresentation, isFailureTooltipVisible {
-                failureTooltip(presentation)
-                    .offset(x: -38, y: -10)
-                    .allowsHitTesting(false)
-            }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+    }
+
+    private var statusIndicator: some View {
+        ZStack {
+            Circle()
+                .fill(statusColor.opacity(0.10))
+                .frame(width: 18, height: 18)
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
         }
-        .overlay(alignment: .topLeading) {
-            if isIdentityTooltipVisible {
-                identityTooltip
-                    .offset(x: 20, y: -12)
-                    .allowsHitTesting(false)
-            }
-        }
-        .zIndex(isFailureTooltipVisible || isIdentityTooltipVisible ? 2 : 0)
     }
 
     private var endpointText: String {
@@ -1054,7 +1117,7 @@ struct TunnelRow: View {
                 .help(fullRouteText(for: forward))
         } else {
             Text(verbatim: compactRouteSummary)
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .font(.system(size: 11.2, weight: .medium, design: .monospaced))
                 .monospacedDigit()
                 .foregroundStyle(.secondary.opacity(0.95))
                 .lineLimit(1)
@@ -1067,41 +1130,55 @@ struct TunnelRow: View {
     private func routeView(for forward: ForwardSpec) -> some View {
         switch forward.kind {
         case .local:
-            HStack(spacing: 4) {
-                Text(verbatim: String(forward.listenPort))
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.secondary)
-                Text(verbatim: compactDestinationText(for: forward))
-            }
-            .font(.system(size: 12, weight: .medium, design: .monospaced))
-            .monospacedDigit()
-            .foregroundStyle(.secondary.opacity(0.95))
-            .lineLimit(1)
-            .truncationMode(.tail)
+            routeLine(
+                first: String(forward.listenPort),
+                second: compactDestinationText(for: forward),
+                arrow: "chevron.right"
+            )
         case .remote:
-            HStack(spacing: 4) {
-                Text(verbatim: compactDestinationText(for: forward))
-                Image(systemName: "arrow.left")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.secondary)
-                Text(verbatim: String(forward.listenPort))
-            }
-            .font(.system(size: 12, weight: .medium, design: .monospaced))
-            .monospacedDigit()
-            .foregroundStyle(.secondary.opacity(0.95))
-            .lineLimit(1)
-            .truncationMode(.tail)
+            routeLine(
+                first: compactDestinationText(for: forward),
+                second: String(forward.listenPort),
+                arrow: "chevron.left"
+            )
         case .dynamic:
             HStack(spacing: 4) {
                 Text(verbatim: "SOCKS")
                 Text(verbatim: String(forward.listenPort))
             }
-            .font(.system(size: 12, weight: .medium, design: .monospaced))
+            .font(.system(size: 11.2, weight: .medium, design: .monospaced))
             .monospacedDigit()
             .foregroundStyle(.secondary.opacity(0.95))
             .lineLimit(1)
             .truncationMode(.tail)
+        }
+    }
+
+    private func routeLine(first: String, second: String, arrow: String) -> some View {
+        HStack(spacing: 7) {
+            Text(verbatim: first)
+                .font(.system(size: 11.2, weight: .bold, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(.secondary.opacity(0.95))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 6)
+                .frame(height: 21)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(Color.secondary.opacity(0.065))
+                )
+
+            Image(systemName: arrow)
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.tertiary)
+
+            Text(verbatim: second)
+                .font(.system(size: 11.2, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(.secondary.opacity(0.88))
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 
@@ -1175,17 +1252,22 @@ struct TunnelRow: View {
             Button("Delete", role: .destructive, action: onDelete)
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 11.5, weight: .bold))
-                .foregroundStyle(.secondary)
-                .frame(width: 24, height: 24)
+                .font(.system(size: 11.5, weight: .heavy))
+                .foregroundStyle(isMenuHovered ? Color.primary.opacity(0.76) : Color.secondary.opacity(0.60))
+                .frame(width: 20, height: 28)
                 .background(
                     Circle()
-                        .stroke(Color.secondary.opacity(0.22), lineWidth: 1)
+                        .fill(Color.secondary.opacity(isMenuHovered ? 0.10 : 0.0))
                 )
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .frame(width: 26, height: 24, alignment: .trailing)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isMenuHovered = hovering
+            }
+        }
+        .frame(width: 20, height: 28, alignment: .trailing)
         .popover(isPresented: $isDetailsPresented, arrowEdge: .trailing) {
             TunnelDetailsPopover(
                 tunnel: tunnel,
@@ -1202,23 +1284,36 @@ struct TunnelRow: View {
         } label: {
             HStack(spacing: 3) {
                 Image(systemName: tunnel.isConfiguredEnabled ? "bolt.fill" : "bolt.slash.fill")
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
                 Text("Auto")
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.system(size: 10.5, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
-                .frame(width: 64, height: 24)
-                .foregroundStyle(tunnel.isConfiguredEnabled ? Color.accentColor : Color.secondary)
+                .frame(width: 56, height: 28)
+                .foregroundStyle(tunnel.isConfiguredEnabled ? Color(red: 0.27, green: 0.20, blue: 0.83) : Color.secondary)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(tunnel.isConfiguredEnabled ? Color.accentColor.opacity(0.055) : Color.secondary.opacity(0.055))
+                        .fill(
+                            tunnel.isConfiguredEnabled
+                                ? Color(red: 0.94, green: 0.95, blue: 1.0).opacity(isAutoHovered ? 1.0 : 0.82)
+                                : Color.secondary.opacity(isAutoHovered ? 0.085 : 0.055)
+                        )
                 )
                 .overlay(
                     Capsule(style: .continuous)
-                        .stroke(tunnel.isConfiguredEnabled ? Color.accentColor.opacity(0.11) : Color.secondary.opacity(0.10), lineWidth: 1)
+                        .stroke(tunnel.isConfiguredEnabled ? Color(red: 0.74, green: 0.80, blue: 1.0).opacity(isAutoHovered ? 0.82 : 0.52) : Color.secondary.opacity(isAutoHovered ? 0.16 : 0.10), lineWidth: 1)
                 )
+                .shadow(color: Color(red: 0.27, green: 0.20, blue: 0.83).opacity(tunnel.isConfiguredEnabled ? (isAutoHovered ? 0.16 : 0.07) : 0), radius: isAutoHovered ? 8 : 5, x: 0, y: isAutoHovered ? 4 : 2)
+                .scaleEffect(isAutoHovered ? 1.015 : 1.0)
         }
-        .buttonStyle(.plain)
-        .frame(width: 64, height: 24)
+        .buttonStyle(CompactPressButtonStyle())
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isAutoHovered = hovering
+            }
+        }
+        .frame(width: 56, height: 28)
         .help(tunnel.isConfiguredEnabled ? "Auto-connect enabled" : "Auto-connect disabled")
     }
 
@@ -1229,35 +1324,62 @@ struct TunnelRow: View {
                 onStop()
             } label: {
                 Text("Stop")
-                    .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 78, height: 26)
-                    .foregroundStyle(Color.red.opacity(0.68))
+                    .font(.system(size: 11, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(width: 68, height: 28)
+                    .foregroundStyle(isPrimaryHovered ? Color(red: 0.82, green: 0.10, blue: 0.08) : Color.primary.opacity(0.82))
                     .background(
                         Capsule(style: .continuous)
-                            .fill(Color.secondary.opacity(0.055))
+                            .fill(isPrimaryHovered ? Color(red: 1.0, green: 0.96, blue: 0.955) : Color(nsColor: .windowBackgroundColor))
                     )
                     .overlay(
                         Capsule(style: .continuous)
-                            .stroke(Color.secondary.opacity(0.08), lineWidth: 1)
+                            .stroke(isPrimaryHovered ? Color(red: 0.95, green: 0.20, blue: 0.18).opacity(0.24) : Color.secondary.opacity(0.18), lineWidth: 1)
                     )
+                    .shadow(color: Color.black.opacity(isPrimaryHovered ? 0.14 : 0.08), radius: isPrimaryHovered ? 6 : 4, x: 0, y: isPrimaryHovered ? 3 : 2)
+                    .scaleEffect(isPrimaryHovered ? 1.015 : 1.0)
             }
-            .buttonStyle(.plain)
-            .frame(width: 78, alignment: .trailing)
+            .buttonStyle(CompactPressButtonStyle())
+            .onHover { hovering in
+                withAnimation(.easeOut(duration: 0.12)) {
+                    isPrimaryHovered = hovering
+                }
+            }
+            .frame(width: 68, alignment: .trailing)
         } else {
             Button {
                 onStart()
             } label: {
                 Text("Connect")
-                    .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 78, height: 26)
+                    .font(.system(size: 11, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                    .frame(width: 68, height: 28)
                     .foregroundStyle(.white)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(Color.accentColor)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        isPrimaryHovered ? Color(red: 0.33, green: 0.24, blue: 0.92) : Color(red: 0.26, green: 0.19, blue: 0.84),
+                                        isPrimaryHovered ? Color(red: 0.12, green: 0.49, blue: 1.0) : Color(red: 0.19, green: 0.42, blue: 0.94),
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
                     )
+                    .shadow(color: Color(red: 0.26, green: 0.19, blue: 0.84).opacity(isPrimaryHovered ? 0.32 : 0.20), radius: isPrimaryHovered ? 9 : 7, x: 0, y: isPrimaryHovered ? 5 : 4)
+                    .scaleEffect(isPrimaryHovered ? 1.015 : 1.0)
             }
-            .buttonStyle(.plain)
-            .frame(width: 78, alignment: .trailing)
+            .buttonStyle(CompactPressButtonStyle())
+            .onHover { hovering in
+                withAnimation(.easeOut(duration: 0.12)) {
+                    isPrimaryHovered = hovering
+                }
+            }
+            .frame(width: 68, alignment: .trailing)
         }
     }
 
@@ -1265,18 +1387,18 @@ struct TunnelRow: View {
         Group {
             if failurePresentation != nil {
                 Image(systemName: "info.circle.fill")
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.68, green: 0.12, blue: 0.10))
-                    .frame(width: 24, height: 24)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(Color(red: 1.0, green: 0.36, blue: 0.35))
+                    .frame(width: 24, height: 28)
                     .background(
-                        Circle()
-                            .fill(Color(red: 0.68, green: 0.12, blue: 0.10).opacity(0.10))
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .fill(Color(red: 1.0, green: 0.36, blue: 0.35).opacity(0.14))
                     )
             } else {
                 Color.clear
             }
         }
-        .frame(width: 24, height: 24)
+        .frame(width: 24, height: 28)
         .contentShape(Rectangle())
         .onHover { hovering in
             if failurePresentation == nil {
@@ -1285,6 +1407,11 @@ struct TunnelRow: View {
                 withAnimation(.easeInOut(duration: 0.08)) {
                     isFailureTooltipVisible = hovering
                 }
+            }
+        }
+        .popover(isPresented: $isFailureTooltipVisible, arrowEdge: .top) {
+            if let presentation = failurePresentation {
+                failureTooltip(presentation)
             }
         }
     }
@@ -1553,6 +1680,155 @@ private enum TunnelFailureClassifier {
     }
 }
 
+struct TunnelEditorSuggestions {
+    let tunnels: [TunnelConfig]
+    let hosts: [String]
+    let users: [String]
+    let sshPorts: [String]
+    let identityFiles: [String]
+    let jumpHosts: [String]
+    let bindAddresses: [String]
+    let destinationHosts: [String]
+    let destinationPorts: [String]
+    let nextAvailableLocalPort: Int
+
+    init(tunnels: [TunnelConfig]) {
+        self.tunnels = tunnels
+        self.hosts = Self.ranked(tunnels.map(\.host))
+        self.users = Self.ranked(tunnels.compactMap(\.user), appending: [NSUserName()])
+        self.sshPorts = Self.ranked(tunnels.map { String($0.sshPort) }, appending: ["22"])
+        self.identityFiles = Self.ranked(tunnels.compactMap(\.identityFile), appending: Self.commonIdentityFiles())
+        self.jumpHosts = Self.ranked(tunnels.compactMap(\.jumpHost))
+
+        let forwards = tunnels.flatMap(\.forwards)
+        self.bindAddresses = Self.ranked(forwards.compactMap(\.bindAddress), appending: ["localhost", "127.0.0.1"])
+        self.destinationHosts = Self.ranked(forwards.compactMap(\.destinationHost), appending: ["localhost", "127.0.0.1"])
+        self.destinationPorts = Self.ranked(
+            forwards.compactMap { $0.destinationPort.map(String.init) },
+            appending: ["3000", "8888", "5432", "8000", "8080"]
+        )
+        self.nextAvailableLocalPort = Self.nextLocalPort(after: forwards)
+    }
+
+    func preferredSSHPort(for host: String) -> String? {
+        let normalizedHost = normalized(host)
+        return Self.ranked(
+            tunnels
+                .filter { normalized($0.host) == normalizedHost }
+                .map { String($0.sshPort) }
+        )
+        .first
+    }
+
+    func preferredUser(for host: String, sshPort: String) -> String? {
+        let normalizedHost = normalized(host)
+        let normalizedPort = sshPort.trimmingCharacters(in: .whitespacesAndNewlines)
+        let exact = tunnels
+            .filter { normalized($0.host) == normalizedHost && String($0.sshPort) == normalizedPort }
+            .compactMap(\.user)
+
+        if let user = Self.ranked(exact).first {
+            return user
+        }
+
+        return Self.ranked(
+            tunnels
+                .filter { normalized($0.host) == normalizedHost }
+                .compactMap(\.user)
+        )
+        .first
+    }
+
+    func preferredIdentity(for host: String, user: String) -> String? {
+        let normalizedHost = normalized(host)
+        let normalizedUser = normalized(user)
+        let exact = tunnels
+            .filter { normalized($0.host) == normalizedHost && normalized($0.user ?? "") == normalizedUser }
+            .compactMap(\.identityFile)
+
+        if let identity = Self.ranked(exact).first {
+            return identity
+        }
+
+        return Self.ranked(
+            tunnels
+                .filter { normalized($0.host) == normalizedHost }
+                .compactMap(\.identityFile)
+        )
+        .first
+    }
+
+    func preferredJumpHost(for host: String) -> String? {
+        let normalizedHost = normalized(host)
+        return Self.ranked(
+            tunnels
+                .filter { normalized($0.host) == normalizedHost }
+                .compactMap(\.jumpHost)
+        )
+        .first
+    }
+
+    private func normalized(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func ranked(_ values: [String], appending defaults: [String] = []) -> [String] {
+        var counts: [String: Int] = [:]
+        var firstSeen: [String: Int] = [:]
+        var canonical: [String: String] = [:]
+
+        for value in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.lowercased()
+            counts[key, default: 0] += 1
+            if firstSeen[key] == nil {
+                firstSeen[key] = firstSeen.count
+                canonical[key] = trimmed
+            }
+        }
+
+        let rankedValues = counts.keys.sorted { left, right in
+            let leftCount = counts[left, default: 0]
+            let rightCount = counts[right, default: 0]
+            if leftCount != rightCount {
+                return leftCount > rightCount
+            }
+            return firstSeen[left, default: 0] < firstSeen[right, default: 0]
+        }
+        .compactMap { canonical[$0] }
+
+        return rankedValues + defaults.filter { defaultValue in
+            !rankedValues.contains { $0.caseInsensitiveCompare(defaultValue) == .orderedSame }
+        }
+    }
+
+    private static func commonIdentityFiles() -> [String] {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let candidates = [
+            "\(home)/.ssh/id_ed25519",
+            "\(home)/.ssh/id_rsa",
+            "~/.ssh/id_ed25519",
+            "~/.ssh/id_rsa",
+        ]
+        return candidates.filter { path in
+            if path.hasPrefix("~") {
+                return true
+            }
+            return FileManager.default.fileExists(atPath: path)
+        }
+    }
+
+    private static func nextLocalPort(after forwards: [ForwardSpec]) -> Int {
+        let used = Set(forwards.map(\.listenPort))
+        var candidate = max(8875, (used.filter { $0 >= 1024 }.max() ?? 8874) + 1)
+        while used.contains(candidate) {
+            candidate += 1
+        }
+        return candidate
+    }
+}
+
 struct TunnelDraft: Identifiable {
     struct ForwardDraft: Identifiable {
         let id: UUID
@@ -1649,18 +1925,47 @@ struct TunnelDraft: Identifiable {
         self.forwards = tunnel.forwards.map(ForwardDraft.init)
     }
 
-    static func newTunnel() -> TunnelDraft {
-        TunnelDraft(
+    static func newTunnel(from existingTunnels: [TunnelConfig] = []) -> TunnelDraft {
+        let suggestions = TunnelEditorSuggestions(tunnels: existingTunnels)
+        let localPort = suggestions.nextAvailableLocalPort
+        let destinationPort = suggestions.destinationPorts.first ?? "3000"
+        let defaultName = uniqueName(
+            base: "tunnel-\(localPort)-web\(destinationPort)",
+            existingNames: existingTunnels.map(\.name)
+        )
+
+        return TunnelDraft(
             tunnel: TunnelConfig(
-                name: "",
-                host: "",
+                name: defaultName,
+                host: suggestions.hosts.first ?? "",
+                user: suggestions.users.first,
+                sshPort: Int(suggestions.sshPorts.first ?? "22") ?? 22,
+                identityFile: existingTunnels.compactMap(\.identityFile).first,
+                jumpHost: existingTunnels.compactMap(\.jumpHost).first,
                 forwards: [
-                    ForwardSpec(kind: .local, listenPort: 0, destinationHost: "", destinationPort: 0),
+                    ForwardSpec(
+                        kind: .local,
+                        listenPort: localPort,
+                        destinationHost: suggestions.destinationHosts.first ?? "localhost",
+                        destinationPort: Int(destinationPort) ?? 3000
+                    ),
                 ],
                 enabled: true
             ),
             originalName: nil
         )
+    }
+
+    private static func uniqueName(base: String, existingNames: [String]) -> String {
+        let existing = Set(existingNames)
+        guard !existing.contains(base) else {
+            var suffix = 2
+            while existing.contains("\(base)-\(suffix)") {
+                suffix += 1
+            }
+            return "\(base)-\(suffix)"
+        }
+        return base
     }
 
     func toTunnelConfig() throws -> TunnelConfig {
@@ -1715,27 +2020,35 @@ struct TunnelDraft: Identifiable {
 
 struct TunnelEditorSheet: View {
     @Binding var draft: TunnelDraft
+    let suggestions: TunnelEditorSuggestions
     let onCancel: () -> Void
     let onSave: () -> Void
     let onDelete: () -> Void
+    @State private var isAdvancedExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(draft.originalName == nil ? "New Tunnel" : "Edit Tunnel")
-                    .font(.system(size: 16, weight: .semibold))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(draft.originalName == nil ? "New Tunnel" : "Edit Tunnel")
+                        .font(.system(size: 16, weight: .bold))
+                    Text("Common settings first. Advanced SSH knobs stay tucked away.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 Spacer()
-                Toggle("Auto-connect", isOn: $draft.enabled)
+                Toggle("Auto", isOn: $draft.enabled)
                     .toggleStyle(.switch)
                     .controlSize(.small)
+                    .help("Connect this tunnel when Burrow launches")
             }
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    detailsSection
-                    timingSection
+                VStack(alignment: .leading, spacing: 10) {
+                    endpointSection
                     forwardsSection
-                    sshOptionsSection
+                    advancedSection
                 }
                 .padding(.vertical, 2)
             }
@@ -1754,139 +2067,465 @@ struct TunnelEditorSheet: View {
             .buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var detailsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Connection")
-                .font(.system(size: 13, weight: .medium))
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                GridRow {
-                    Text("Name")
-                    TextField("prod-db", text: $draft.name)
-                }
-                GridRow {
-                    Text("Host")
-                    TextField("bastion.example.com", text: $draft.host)
-                }
-                GridRow {
-                    Text("User")
-                    TextField("alice", text: $draft.user)
-                }
-                GridRow {
-                    Text("SSH Port")
-                    TextField("22", text: $draft.sshPort)
-                }
-                GridRow {
-                    Text("Identity")
-                    TextField("~/.ssh/id_ed25519", text: $draft.identityFile)
-                }
-                GridRow {
-                    Text("Jump Host")
-                    TextField("jumper.example.com", text: $draft.jumpHost)
-                }
-            }
-            .textFieldStyle(.roundedBorder)
+        .onChange(of: draft.host) { _ in
+            applyEndpointGuess(overwrite: false)
+        }
+        .onChange(of: draft.sshPort) { _ in
+            applyEndpointGuess(overwrite: false)
         }
     }
 
-    private var timingSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Keepalive")
-                .font(.system(size: 13, weight: .medium))
+    private var endpointSection: some View {
+        EditorSection(
+            title: "Endpoint",
+            subtitle: "Pick a known SSH host or type a new one."
+        ) {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 GridRow {
-                    Text("Alive Interval")
-                    TextField("30", text: $draft.serverAliveInterval)
+                    editorLabel("Name")
+                    TextField("prod-db", text: $draft.name)
+                        .textFieldStyle(.roundedBorder)
                 }
                 GridRow {
-                    Text("Alive Count Max")
-                    TextField("5", text: $draft.serverAliveCountMax)
+                    editorLabel("Host")
+                    SuggestingTextField(
+                        placeholder: "bastion.example.com",
+                        text: $draft.host,
+                        suggestions: suggestions.hosts
+                    )
                 }
                 GridRow {
-                    Text("Reconnect Delay")
-                    TextField("5", text: $draft.reconnectDelaySeconds)
+                    editorLabel("User")
+                    SuggestingTextField(
+                        placeholder: "alice",
+                        text: $draft.user,
+                        suggestions: suggestions.users
+                    )
+                }
+                GridRow {
+                    editorLabel("SSH Port")
+                    HStack(spacing: 8) {
+                        SuggestingTextField(
+                            placeholder: "22",
+                            text: $draft.sshPort,
+                            suggestions: suggestions.sshPorts
+                        )
+                        .frame(width: 92)
+
+                        Button {
+                            applyEndpointGuess(overwrite: true)
+                        } label: {
+                            Label("Autofill", systemImage: "wand.and.stars")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(draft.host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .help("Fill user, port, identity, and jump host from matching saved tunnels")
+
+                        Spacer()
+                    }
                 }
             }
-            .textFieldStyle(.roundedBorder)
         }
     }
 
     private var forwardsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        EditorSection(
+            title: "Forward",
+            subtitle: "The usual case is local port -> destination service."
+        ) {
             HStack {
-                Text("Forwards")
-                    .font(.system(size: 13, weight: .medium))
+                Text("\(draft.forwards.count) route\(draft.forwards.count == 1 ? "" : "s")")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(.secondary)
                 Spacer()
                 Button("Add Forward") {
-                    draft.forwards.append(TunnelDraft.ForwardDraft())
+                    draft.forwards.append(defaultForwardDraft())
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
 
             ForEach($draft.forwards) { $forward in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Picker("Type", selection: $forward.kind) {
-                            Text("Local").tag(ForwardSpec.Kind.local)
-                            Text("Remote").tag(ForwardSpec.Kind.remote)
-                            Text("Dynamic").tag(ForwardSpec.Kind.dynamic)
-                        }
-                        .pickerStyle(.segmented)
-
-                        Button("Remove", role: .destructive) {
-                            draft.forwards.removeAll { $0.id == forward.id }
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                ForwardEditorCard(
+                    forward: $forward,
+                    suggestions: suggestions,
+                    canRemove: draft.forwards.count > 1,
+                    onRemove: {
+                        draft.forwards.removeAll { $0.id == forward.id }
                     }
-
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                        GridRow {
-                            Text("Bind")
-                            TextField("localhost", text: $forward.bindAddress)
-                        }
-                        GridRow {
-                            Text("Listen Port")
-                            TextField("8875", text: $forward.listenPort)
-                        }
-                        if forward.kind != .dynamic {
-                            GridRow {
-                                Text("Dest Host")
-                                TextField("localhost", text: $forward.destinationHost)
-                            }
-                            GridRow {
-                                Text("Dest Port")
-                                TextField("3000", text: $forward.destinationPort)
-                            }
-                        }
-                    }
-                    .textFieldStyle(.roundedBorder)
-                }
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(nsColor: .controlBackgroundColor))
                 )
             }
         }
     }
 
-    private var sshOptionsSection: some View {
+    private var advancedSection: some View {
+        DisclosureGroup(isExpanded: $isAdvancedExpanded) {
+            VStack(alignment: .leading, spacing: 10) {
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow {
+                        editorLabel("Identity")
+                        SuggestingTextField(
+                            placeholder: "~/.ssh/id_ed25519",
+                            text: $draft.identityFile,
+                            suggestions: suggestions.identityFiles
+                        )
+                    }
+                    GridRow {
+                        editorLabel("Jump Host")
+                        SuggestingTextField(
+                            placeholder: "jumper.example.com",
+                            text: $draft.jumpHost,
+                            suggestions: suggestions.jumpHosts
+                        )
+                    }
+                    GridRow {
+                        editorLabel("Keepalive")
+                        HStack(spacing: 6) {
+                            compactTextField("30", text: $draft.serverAliveInterval, width: 58)
+                            Text("sec x")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                            compactTextField("3", text: $draft.serverAliveCountMax, width: 44)
+                            Text("tries")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    }
+                    GridRow {
+                        editorLabel("Reconnect")
+                        HStack(spacing: 6) {
+                            compactTextField("5", text: $draft.reconnectDelaySeconds, width: 58)
+                            Text("seconds")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Extra SSH Options")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    TextEditor(text: $draft.extraSSHOptionsText)
+                        .font(.system(size: 11, design: .monospaced))
+                        .frame(minHeight: 76)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.secondary.opacity(0.16))
+                        )
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Text("Advanced SSH settings")
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text("keys, jump hosts, keepalive, raw options")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.vertical, 2)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.secondary.opacity(0.045))
+        )
+    }
+
+    private func defaultForwardDraft() -> TunnelDraft.ForwardDraft {
+        TunnelDraft.ForwardDraft(
+            kind: .local,
+            listenPort: nextDraftListenPort,
+            destinationHost: suggestions.destinationHosts.first ?? "localhost",
+            destinationPort: suggestions.destinationPorts.first ?? "3000"
+        )
+    }
+
+    private var nextDraftListenPort: String {
+        let used = Set(draft.forwards.compactMap { Int($0.listenPort) })
+        var candidate = suggestions.nextAvailableLocalPort
+        while used.contains(candidate) {
+            candidate += 1
+        }
+        return String(candidate)
+    }
+
+    private func applyEndpointGuess(overwrite: Bool) {
+        let host = draft.host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty else { return }
+
+        if let port = suggestions.preferredSSHPort(for: host), overwrite || draft.sshPort.isEmpty || draft.sshPort == "22" {
+            draft.sshPort = port
+        }
+
+        if let user = suggestions.preferredUser(for: host, sshPort: draft.sshPort), overwrite || draft.user.isEmpty {
+            draft.user = user
+        }
+
+        if let identity = suggestions.preferredIdentity(for: host, user: draft.user), overwrite || draft.identityFile.isEmpty {
+            draft.identityFile = identity
+        }
+
+        if let jumpHost = suggestions.preferredJumpHost(for: host), overwrite || draft.jumpHost.isEmpty {
+            draft.jumpHost = jumpHost
+        }
+    }
+
+    private func compactTextField(_ placeholder: String, text: Binding<String>, width: CGFloat) -> some View {
+        TextField(placeholder, text: text)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: width)
+    }
+
+    private func editorLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10.5, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .frame(width: 70, alignment: .trailing)
+    }
+}
+
+private struct EditorSection<Content: View>: View {
+    let title: String
+    let subtitle: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Extra SSH Options")
-                .font(.system(size: 13, weight: .medium))
-            Text("One `key=value` or raw ssh `-o` value per line.")
-                .font(.system(size: 11))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 12.5, weight: .bold))
+                Text(subtitle)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            content
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.62))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.black.opacity(0.035), lineWidth: 1)
+        )
+    }
+}
+
+private struct ForwardEditorCard: View {
+    @Binding var forward: TunnelDraft.ForwardDraft
+    let suggestions: TunnelEditorSuggestions
+    let canRemove: Bool
+    let onRemove: () -> Void
+    @State private var isAdvancedExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(forwardTitle, systemImage: "arrow.left.and.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if canRemove {
+                    Button("Remove", role: .destructive, action: onRemove)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+            }
+
+            routeFields
+
+            DisclosureGroup(isExpanded: $isAdvancedExpanded) {
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow {
+                        editorLabel("Type")
+                        Picker("Type", selection: $forward.kind) {
+                            Text("Local").tag(ForwardSpec.Kind.local)
+                            Text("Remote").tag(ForwardSpec.Kind.remote)
+                            Text("Dynamic").tag(ForwardSpec.Kind.dynamic)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 220)
+                    }
+                    GridRow {
+                        editorLabel("Bind")
+                        SuggestingTextField(
+                            placeholder: "localhost",
+                            text: $forward.bindAddress,
+                            suggestions: suggestions.bindAddresses
+                        )
+                    }
+                }
+                .padding(.top, 6)
+            } label: {
+                Text("Advanced route settings")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(9)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.secondary.opacity(0.045))
+        )
+    }
+
+    @ViewBuilder
+    private var routeFields: some View {
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+            switch forward.kind {
+            case .local:
+                GridRow {
+                    editorLabel("Local Port")
+                    SuggestingTextField(
+                        placeholder: "8875",
+                        text: $forward.listenPort,
+                        suggestions: []
+                    )
+                    .frame(width: 92)
+                }
+                GridRow {
+                    editorLabel("To")
+                    destinationFields
+                }
+            case .remote:
+                GridRow {
+                    editorLabel("Remote Port")
+                    SuggestingTextField(
+                        placeholder: "8875",
+                        text: $forward.listenPort,
+                        suggestions: []
+                    )
+                    .frame(width: 92)
+                }
+                GridRow {
+                    editorLabel("From")
+                    destinationFields
+                }
+            case .dynamic:
+                GridRow {
+                    editorLabel("SOCKS Port")
+                    SuggestingTextField(
+                        placeholder: "1080",
+                        text: $forward.listenPort,
+                        suggestions: []
+                    )
+                    .frame(width: 92)
+                }
+            }
+        }
+    }
+
+    private var destinationFields: some View {
+        HStack(spacing: 6) {
+            SuggestingTextField(
+                placeholder: "localhost",
+                text: $forward.destinationHost,
+                suggestions: suggestions.destinationHosts
+            )
+            Text(":")
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.secondary)
-            TextEditor(text: $draft.extraSSHOptionsText)
-                .font(.system(size: 12, design: .monospaced))
-                .frame(minHeight: 120)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.secondary.opacity(0.2))
-                )
+            SuggestingTextField(
+                placeholder: "3000",
+                text: $forward.destinationPort,
+                suggestions: suggestions.destinationPorts
+            )
+            .frame(width: 76)
+        }
+    }
+
+    private var forwardTitle: String {
+        switch forward.kind {
+        case .local:
+            return "Local forward"
+        case .remote:
+            return "Remote forward"
+        case .dynamic:
+            return "Dynamic SOCKS forward"
+        }
+    }
+
+    private func editorLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10.5, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .frame(width: 70, alignment: .trailing)
+    }
+}
+
+private struct SuggestingTextField: NSViewRepresentable {
+    let placeholder: String
+    @Binding var text: String
+    let suggestions: [String]
+
+    func makeNSView(context: Context) -> NSComboBox {
+        let comboBox = NSComboBox()
+        comboBox.isEditable = true
+        comboBox.completes = true
+        comboBox.usesDataSource = false
+        comboBox.numberOfVisibleItems = 8
+        comboBox.placeholderString = placeholder
+        comboBox.controlSize = .small
+        comboBox.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
+        comboBox.delegate = context.coordinator
+        comboBox.target = context.coordinator
+        comboBox.action = #selector(Coordinator.commit(_:))
+        comboBox.addItems(withObjectValues: suggestions)
+        return comboBox
+    }
+
+    func updateNSView(_ comboBox: NSComboBox, context: Context) {
+        context.coordinator.parent = self
+
+        if comboBox.stringValue != text {
+            comboBox.stringValue = text
+        }
+
+        let existing = (0..<comboBox.numberOfItems).compactMap { comboBox.itemObjectValue(at: $0) as? String }
+        if existing != suggestions {
+            comboBox.removeAllItems()
+            comboBox.addItems(withObjectValues: suggestions)
+            comboBox.numberOfVisibleItems = max(4, min(10, max(suggestions.count, 1)))
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    final class Coordinator: NSObject, NSComboBoxDelegate, NSControlTextEditingDelegate {
+        var parent: SuggestingTextField
+
+        init(parent: SuggestingTextField) {
+            self.parent = parent
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let comboBox = obj.object as? NSComboBox else { return }
+            parent.text = comboBox.stringValue
+        }
+
+        func comboBoxSelectionDidChange(_ notification: Notification) {
+            guard let comboBox = notification.object as? NSComboBox else { return }
+            parent.text = comboBox.stringValue
+        }
+
+        @MainActor
+        @objc func commit(_ sender: NSComboBox) {
+            parent.text = sender.stringValue
         }
     }
 }

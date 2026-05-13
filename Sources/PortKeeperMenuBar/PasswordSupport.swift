@@ -48,11 +48,14 @@ enum PasswordStoreError: LocalizedError {
 
 enum ConnectionPreparationError: LocalizedError {
     case cancelledPasswordPrompt
+    case missingSavedPassword(String)
 
     var errorDescription: String? {
         switch self {
         case .cancelledPasswordPrompt:
             return "Password entry was cancelled."
+        case .missingSavedPassword(let endpoint):
+            return "No saved SSH password for \(endpoint). Start manually to enter it."
         }
     }
 }
@@ -89,7 +92,13 @@ final class PasswordStore {
         if let password = vault.credentials[key.account] {
             return password
         }
-        return try loadVault(service: legacyService).credentials[key.account]
+        if let password = try loadVault(service: legacyService).credentials[key.account] {
+            return password
+        }
+        if let password = try loadSinglePassword(service: service, account: key.account) {
+            return password
+        }
+        return try loadSinglePassword(service: legacyService, account: key.account)
     }
 
     func save(password: String, for key: TunnelCredentialKey) throws {
@@ -131,6 +140,30 @@ final class PasswordStore {
             return try JSONDecoder().decode(CredentialVault.self, from: data)
         case errSecItemNotFound:
             return CredentialVault()
+        default:
+            throw PasswordStoreError.unhandled(status)
+        }
+    }
+
+    private func loadSinglePassword(service: String, account: String) throws -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        switch status {
+        case errSecSuccess:
+            guard let data = item as? Data else {
+                return nil
+            }
+            return String(data: data, encoding: .utf8)
+        case errSecItemNotFound:
+            return nil
         default:
             throw PasswordStoreError.unhandled(status)
         }
