@@ -4,7 +4,7 @@ import Foundation
 public enum TunnelRuntimeEvent: Sendable {
     case starting
     case connected
-    case exited(Int32)
+    case exited(Int32, String?)
     case failedToStart(String)
     case authenticationFailed(String)
     case log(String)
@@ -46,12 +46,13 @@ public final class TunnelSupervisor: @unchecked Sendable {
         await withTaskCancellationHandler(operation: {
             while !Task.isCancelled {
                 do {
-                    let exitCode = try runOnce()
+                    let result = try runOnce()
                     if Task.isCancelled {
                         break
                     }
-                    eventHandler(.exited(exitCode))
-                    logger("[\(tunnel.name)] ssh exited with code \(exitCode). Reconnecting in \(tunnel.reconnectDelaySeconds)s.")
+                    eventHandler(.exited(result.exitCode, result.diagnosticMessage))
+                    let diagnosticSuffix = result.diagnosticMessage.map { " \($0)" } ?? ""
+                    logger("[\(tunnel.name)] ssh exited with code \(result.exitCode).\(diagnosticSuffix) Reconnecting in \(tunnel.reconnectDelaySeconds)s.")
                 } catch let error as AuthenticationFailureError {
                     if Task.isCancelled {
                         break
@@ -79,32 +80,12 @@ public final class TunnelSupervisor: @unchecked Sendable {
         })
     }
 
-    private func runOnce() throws -> Int32 {
+    private func runOnce() throws -> RunResult {
         try PortKeeperRuntimeRegistry.reclaimOwnedProcess(
             for: tunnel,
             executablePath: executablePath,
             logger: logger
         )
-
-        final class RunState: @unchecked Sendable {
-            private let lock = NSLock()
-            private var authenticationFailureMessage: String?
-
-            func recordAuthenticationFailure(_ message: String) {
-                lock.lock()
-                if authenticationFailureMessage == nil {
-                    authenticationFailureMessage = message
-                }
-                lock.unlock()
-            }
-
-            func consumeAuthenticationFailure() -> String? {
-                lock.lock()
-                let message = authenticationFailureMessage
-                lock.unlock()
-                return message
-            }
-        }
 
         let runState = RunState()
         let process = Process()
@@ -129,6 +110,8 @@ public final class TunnelSupervisor: @unchecked Sendable {
                     self.eventHandler(.log(line))
                     if Self.isAuthenticationFailureLine(line) {
                         runState.recordAuthenticationFailure(line)
+                    } else if Self.isDiagnosticFailureLine(line) {
+                        runState.recordDiagnostic(line)
                     }
                 }
             }
@@ -142,7 +125,7 @@ public final class TunnelSupervisor: @unchecked Sendable {
         eventHandler(.starting)
         try process.run()
         try PortKeeperRuntimeRegistry.recordProcess(process.processIdentifier, for: tunnel.name)
-        let didConnect = waitForForwardReadiness(process: process)
+        let didConnect = waitForForwardReadiness(process: process, runState: runState)
         if didConnect {
             eventHandler(.connected)
         }
@@ -159,7 +142,7 @@ public final class TunnelSupervisor: @unchecked Sendable {
             throw AuthenticationFailureError(message: authenticationFailure)
         }
 
-        return process.terminationStatus
+        return RunResult(exitCode: process.terminationStatus, diagnosticMessage: runState.currentDiagnostic())
     }
 
     private static func isAuthenticationFailureLine(_ line: String) -> Bool {
@@ -171,7 +154,27 @@ public final class TunnelSupervisor: @unchecked Sendable {
             normalized.contains("access denied")
     }
 
-    private func waitForForwardReadiness(process: Process) -> Bool {
+    private static func isDiagnosticFailureLine(_ line: String) -> Bool {
+        let normalized = line.lowercased()
+        return normalized.contains("address already in use") ||
+            normalized.contains("cannot listen to port") ||
+            normalized.contains("could not request local forwarding") ||
+            normalized.contains("could not resolve hostname") ||
+            normalized.contains("nodename nor servname") ||
+            normalized.contains("temporary failure in name resolution") ||
+            normalized.contains("operation timed out") ||
+            normalized.contains("connection timed out") ||
+            normalized.contains("network is unreachable") ||
+            normalized.contains("no route to host") ||
+            normalized.contains("connection refused") ||
+            normalized.contains("connection closed") ||
+            normalized.contains("connection reset") ||
+            normalized.contains("broken pipe") ||
+            normalized.contains("host key verification failed") ||
+            normalized.contains("remote host identification has changed")
+    }
+
+    private func waitForForwardReadiness(process: Process, runState: RunState) -> Bool {
         let probeTargets = tunnel.forwards.compactMap { forward -> (String, Int)? in
             switch forward.kind {
             case .local, .dynamic:
@@ -186,30 +189,30 @@ public final class TunnelSupervisor: @unchecked Sendable {
             // Remote-only forwards: no local port to probe. Give ssh a moment to fail-fast,
             // then treat a still-running process as connected.
             let warmupDeadline = Date().addingTimeInterval(2)
-            while process.isRunning && Date() < warmupDeadline {
+            while process.isRunning && runState.currentDiagnostic() == nil && Date() < warmupDeadline {
                 usleep(150_000)
             }
-            return process.isRunning
+            return process.isRunning && runState.currentDiagnostic() == nil
         }
 
         // Brief warmup so ssh has a chance to fail-fast on bind conflicts before
         // we mistake another process listening on the same port for our forward.
         let warmupDeadline = Date().addingTimeInterval(0.4)
-        while process.isRunning && Date() < warmupDeadline {
+        while process.isRunning && runState.currentDiagnostic() == nil && Date() < warmupDeadline {
             usleep(100_000)
         }
-        guard process.isRunning else {
+        guard process.isRunning, runState.currentDiagnostic() == nil else {
             return false
         }
 
         let deadline = Date().addingTimeInterval(TimeInterval(max(tunnel.serverAliveInterval, 10)))
-        let stableDuration: TimeInterval = 1.0
-        while process.isRunning && Date() < deadline {
+        let stableDuration: TimeInterval = 1.5
+        while process.isRunning && runState.currentDiagnostic() == nil && Date() < deadline {
             if probeTargets.contains(where: { processOwnsListener(process, port: $0.1) && canConnect(host: $0.0, port: $0.1) }) {
                 let stableUntil = Date().addingTimeInterval(stableDuration)
                 var remainedHealthy = true
 
-                while process.isRunning && Date() < stableUntil {
+                while process.isRunning && runState.currentDiagnostic() == nil && Date() < stableUntil {
                     if !probeTargets.contains(where: { processOwnsListener(process, port: $0.1) && canConnect(host: $0.0, port: $0.1) }) {
                         remainedHealthy = false
                         break
@@ -217,7 +220,7 @@ public final class TunnelSupervisor: @unchecked Sendable {
                     usleep(150_000)
                 }
 
-                if remainedHealthy && process.isRunning {
+                if remainedHealthy && process.isRunning && runState.currentDiagnostic() == nil {
                     return true
                 }
             }
@@ -309,5 +312,46 @@ public final class TunnelSupervisor: @unchecked Sendable {
         if process.isRunning {
             process.terminate()
         }
+    }
+}
+
+private struct RunResult {
+    let exitCode: Int32
+    let diagnosticMessage: String?
+}
+
+private final class RunState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var authenticationFailureMessage: String?
+    private var diagnosticMessage: String?
+
+    func recordAuthenticationFailure(_ message: String) {
+        lock.lock()
+        if authenticationFailureMessage == nil {
+            authenticationFailureMessage = message
+        }
+        lock.unlock()
+    }
+
+    func recordDiagnostic(_ message: String) {
+        lock.lock()
+        if diagnosticMessage == nil {
+            diagnosticMessage = message
+        }
+        lock.unlock()
+    }
+
+    func consumeAuthenticationFailure() -> String? {
+        lock.lock()
+        let message = authenticationFailureMessage
+        lock.unlock()
+        return message
+    }
+
+    func currentDiagnostic() -> String? {
+        lock.lock()
+        let message = diagnosticMessage
+        lock.unlock()
+        return message
     }
 }

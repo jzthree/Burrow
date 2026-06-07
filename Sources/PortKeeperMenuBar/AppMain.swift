@@ -660,9 +660,10 @@ final class TunnelEventBridge: @unchecked Sendable {
                 self.owner?.recordAuthenticationFailure(for: self.tunnelName)
                 self.owner?.updateState(for: self.tunnelName, isRunning: false, state: .failed, message: "Authentication failed: \(message)")
                 self.owner?.globalMessage = "\(self.tunnelName): authentication failed. \(message)"
-            case .exited(let code):
-                self.owner?.updateState(for: self.tunnelName, isRunning: true, state: .failed, message: "ssh exited \(code); retrying")
-                self.owner?.globalMessage = "\(self.tunnelName): ssh exited with code \(code). Retrying."
+            case .exited(let code, let diagnostic):
+                let message = diagnostic.map { "ssh exited \(code): \($0); retrying" } ?? "ssh exited \(code); retrying"
+                self.owner?.updateState(for: self.tunnelName, isRunning: true, state: .failed, message: message)
+                self.owner?.globalMessage = diagnostic.map { "\(self.tunnelName): \($0). Retrying." } ?? "\(self.tunnelName): ssh exited with code \(code). Retrying."
             case .failedToStart(let message):
                 self.owner?.updateState(for: self.tunnelName, isRunning: true, state: .failed, message: "Connect failed; retrying: \(message)")
                 self.owner?.globalMessage = "\(self.tunnelName): \(message). Retrying."
@@ -1661,7 +1662,7 @@ private enum TunnelFailureClassifier {
             )
         }
 
-        if containsAny(lowercased, ["operation timed out", "connection timed out", "network is unreachable", "no route to host", "connection refused"]) {
+        if containsAny(lowercased, ["operation timed out", "connection timed out", "network is unreachable", "no route to host", "connection refused", "connection closed", "connection reset", "broken pipe"]) {
             return TunnelFailurePresentation(
                 category: "network issue",
                 codeLine: "network unavailable",

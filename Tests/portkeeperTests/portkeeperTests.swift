@@ -18,6 +18,18 @@ final class EventRecorder: @unchecked Sendable {
         lock.unlock()
         return result
     }
+
+    func firstExitDiagnostic() -> String? {
+        lock.lock()
+        let diagnostic = events.compactMap { event -> String? in
+            if case .exited(_, let message) = event {
+                return message
+            }
+            return nil
+        }.first
+        lock.unlock()
+        return diagnostic
+    }
 }
 
 @Test func sshArgumentsIncludeExpectedFlags() async throws {
@@ -289,9 +301,11 @@ final class EventRecorder: @unchecked Sendable {
         if case .exited = $0 { return true }
         return false
     }
+    let diagnostic = recorder.firstExitDiagnostic()
 
     #expect(!sawAuthFailure)
     #expect(sawExit)
+    #expect(diagnostic?.contains("Could not resolve hostname") == true)
 
     runTask.cancel()
     _ = await runTask.result
