@@ -82,23 +82,43 @@ private struct CredentialVault: Codable {
     var credentials: [String: String] = [:]
 }
 
+struct PreloadedPasswords {
+    private let credentials: [String: String]
+
+    init(credentials: [String: String]) {
+        self.credentials = credentials
+    }
+
+    func password(for key: TunnelCredentialKey) -> String? {
+        credentials[key.account]
+    }
+}
+
 final class PasswordStore {
     private let service = "Burrow"
     private let legacyService = "PortKeeper"
     private let vaultAccount = "__credential_vault__"
 
     func password(for key: TunnelCredentialKey) throws -> String? {
-        let vault = try loadVault(service: service)
-        if let password = vault.credentials[key.account] {
-            return password
+        try preloadPasswords(for: [key]).password(for: key)
+    }
+
+    func preloadPasswords(for keys: Set<TunnelCredentialKey>) throws -> PreloadedPasswords {
+        var credentials = try loadVault(service: legacyService).credentials
+        credentials.merge(try loadVault(service: service).credentials) { _, current in current }
+
+        for key in keys where credentials[key.account] == nil {
+            if let password = try loadSinglePassword(service: service, account: key.account) {
+                credentials[key.account] = password
+                continue
+            }
+
+            if let password = try loadSinglePassword(service: legacyService, account: key.account) {
+                credentials[key.account] = password
+            }
         }
-        if let password = try loadVault(service: legacyService).credentials[key.account] {
-            return password
-        }
-        if let password = try loadSinglePassword(service: service, account: key.account) {
-            return password
-        }
-        return try loadSinglePassword(service: legacyService, account: key.account)
+
+        return PreloadedPasswords(credentials: credentials)
     }
 
     func save(password: String, for key: TunnelCredentialKey) throws {

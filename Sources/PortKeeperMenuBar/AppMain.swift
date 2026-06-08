@@ -53,6 +53,12 @@ final class MenuBarViewModel: ObservableObject {
         var recentLogs: [String]
     }
 
+    private struct PreparedTunnelLaunch {
+        let name: String
+        let tunnel: TunnelConfig
+        let preparation: ConnectionPreparation
+    }
+
     let store = ConfigStore()
     let passwordStore = PasswordStore()
 
@@ -175,9 +181,7 @@ final class MenuBarViewModel: ObservableObject {
     }
 
     func startEnabledTunnels() {
-        for tunnel in tunnels where tunnel.isConfiguredEnabled {
-            startTunnel(named: tunnel.id, allowPasswordPrompt: false)
-        }
+        startTunnels(tunnels.filter(\.isConfiguredEnabled), allowPasswordPrompt: false, preloadCredentials: true)
     }
 
     func startEnabledTunnelsIfNeeded() {
@@ -189,9 +193,7 @@ final class MenuBarViewModel: ObservableObject {
     }
 
     func startAll() {
-        for tunnel in tunnels {
-            startTunnel(named: tunnel.id)
-        }
+        startTunnels(tunnels, allowPasswordPrompt: true, preloadCredentials: true)
     }
 
     func stopAll() {
@@ -215,23 +217,96 @@ final class MenuBarViewModel: ObservableObject {
             return
         }
 
+        guard let preparedLaunch = prepareTunnelLaunch(
+            named: name,
+            tunnel: tunnel,
+            allowPasswordPrompt: allowPasswordPrompt,
+            preloadedPasswords: nil
+        ) else {
+            return
+        }
+
+        launchPreparedTunnel(preparedLaunch)
+    }
+
+    private func startTunnels(_ selectedTunnels: [TunnelState], allowPasswordPrompt: Bool, preloadCredentials: Bool) {
+        var launchCandidates: [TunnelState] = []
+
+        for tunnel in selectedTunnels {
+            if tasks[tunnel.id] == nil {
+                launchCandidates.append(tunnel)
+            } else {
+                updateState(for: tunnel.id, isRunning: true, message: "Already running")
+            }
+        }
+
+        guard !launchCandidates.isEmpty else {
+            return
+        }
+
+        let preloadedPasswords = preloadCredentials ? preloadPasswords(for: launchCandidates.map(\.tunnel)) : nil
+        let preparedLaunches = launchCandidates.compactMap { tunnel in
+            prepareTunnelLaunch(
+                named: tunnel.id,
+                tunnel: tunnel.tunnel,
+                allowPasswordPrompt: allowPasswordPrompt,
+                preloadedPasswords: preloadedPasswords
+            )
+        }
+
+        for preparedLaunch in preparedLaunches {
+            launchPreparedTunnel(preparedLaunch)
+        }
+    }
+
+    private func preloadPasswords(for tunnels: [TunnelConfig]) -> PreloadedPasswords? {
+        let credentialKeys = Set(tunnels.compactMap(TunnelCredentialKey.init))
+        guard !credentialKeys.isEmpty else {
+            return nil
+        }
+
+        do {
+            return try passwordStore.preloadPasswords(for: credentialKeys)
+        } catch {
+            globalMessage = "Credential preload failed: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    private func prepareTunnelLaunch(
+        named name: String,
+        tunnel: TunnelConfig,
+        allowPasswordPrompt: Bool,
+        preloadedPasswords: PreloadedPasswords?
+    ) -> PreparedTunnelLaunch? {
         let launchTunnel: TunnelConfig
         do {
             launchTunnel = try preparedTunnelForLaunch(tunnel)
         } catch {
             updateState(for: name, isRunning: false, state: .failed, message: "SSH option setup failed: \(error.localizedDescription)")
             globalMessage = "Failed to prepare SSH options for \(name)."
-            return
+            return nil
         }
 
         let preparation: ConnectionPreparation
         do {
-            preparation = try connectionPreparation(for: launchTunnel, allowPasswordPrompt: allowPasswordPrompt)
+            preparation = try connectionPreparation(
+                for: launchTunnel,
+                allowPasswordPrompt: allowPasswordPrompt,
+                preloadedPasswords: preloadedPasswords
+            )
         } catch {
             updateState(for: name, isRunning: false, state: .failed, message: "Password setup failed: \(error.localizedDescription)")
             globalMessage = "Failed to prepare credentials for \(name)."
-            return
+            return nil
         }
+
+        return PreparedTunnelLaunch(name: name, tunnel: launchTunnel, preparation: preparation)
+    }
+
+    private func launchPreparedTunnel(_ preparedLaunch: PreparedTunnelLaunch) {
+        let name = preparedLaunch.name
+        let preparation = preparedLaunch.preparation
 
         if let pendingSave = preparation.pendingSave {
             pendingCredentialSaves[name] = pendingSave
@@ -245,7 +320,7 @@ final class MenuBarViewModel: ObservableObject {
         let bridge = TunnelEventBridge(owner: self, tunnelName: name)
         let task = Task.detached(priority: .userInitiated) {
             let supervisor = TunnelSupervisor(
-                tunnel: launchTunnel,
+                tunnel: preparedLaunch.tunnel,
                 logger: { message in
                     bridge.log(message)
                 },
@@ -426,7 +501,11 @@ final class MenuBarViewModel: ObservableObject {
         NSApp.terminate(nil)
     }
 
-    private func connectionPreparation(for tunnel: TunnelConfig, allowPasswordPrompt: Bool) throws -> ConnectionPreparation {
+    private func connectionPreparation(
+        for tunnel: TunnelConfig,
+        allowPasswordPrompt: Bool,
+        preloadedPasswords: PreloadedPasswords? = nil
+    ) throws -> ConnectionPreparation {
         guard let credentialKey = TunnelCredentialKey(tunnel: tunnel) else {
             return ConnectionPreparation(environment: [:], pendingSave: nil, credentialSource: .none)
         }
@@ -446,7 +525,14 @@ final class MenuBarViewModel: ObservableObject {
                 )
             }
 
-            if let password = try passwordStore.password(for: credentialKey), !password.isEmpty {
+            let savedPassword: String?
+            if let preloadedPasswords {
+                savedPassword = preloadedPasswords.password(for: credentialKey)
+            } else {
+                savedPassword = try passwordStore.password(for: credentialKey)
+            }
+
+            if let password = savedPassword, !password.isEmpty {
                 sessionPasswords[credentialKey] = password
                 sessionPasswordsByHostUser[hostUserKey] = password
                 return ConnectionPreparation(
