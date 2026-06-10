@@ -121,6 +121,7 @@ final class MenuBarViewModel: ObservableObject {
     private var savedCredentialKeysThisSession: Set<TunnelCredentialKey> = []
     private var invalidCredentialKeys: Set<TunnelCredentialKey> = []
     private var authRePromptCounts: [String: Int] = [:]
+    private var tunnelPromptAllowed: [String: Bool] = [:]
 
     init() {
         loadConfig()
@@ -305,6 +306,7 @@ final class MenuBarViewModel: ObservableObject {
             return
         }
 
+        tunnelPromptAllowed[name] = allowPasswordPrompt
         guard let preparedLaunch = prepareTunnelLaunch(
             named: name,
             tunnel: tunnel,
@@ -333,8 +335,9 @@ final class MenuBarViewModel: ObservableObject {
         }
 
         let preloadedPasswords = preloadCredentials ? preloadPasswords(for: launchCandidates.map(\.tunnel)) : nil
-        let preparedLaunches = launchCandidates.compactMap { tunnel in
-            prepareTunnelLaunch(
+        let preparedLaunches = launchCandidates.compactMap { tunnel -> PreparedTunnelLaunch? in
+            tunnelPromptAllowed[tunnel.id] = allowPasswordPrompt
+            return prepareTunnelLaunch(
                 named: tunnel.id,
                 tunnel: tunnel.tunnel,
                 allowPasswordPrompt: allowPasswordPrompt,
@@ -999,47 +1002,71 @@ final class MenuBarViewModel: ObservableObject {
             return
         }
 
-        // startGateway is a no-op when the gateway already runs; calling it
-        // unconditionally covers both "bring it up" and "already up."
-        guard startGateway(named: gatewayName, allowPasswordPrompt: allowGatewayPrompt) else {
-            updateState(for: prepared.name, isRunning: false, state: .failed, message: "Gateway \(gatewayName) is not running")
-            return
-        }
-
         let socksPort = gatewayConfig.socksPort
         let targetHost = prepared.tunnel.host
         let targetPort = prepared.tunnel.sshPort
 
         updateState(for: prepared.name, isRunning: false, state: .connecting, message: "Waiting for gateway \(gatewayName)")
         Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            // Adopt a working proxy if one is already there — e.g. a VPN left
+            // running by a previous Burrow session. If it can reach the target,
+            // use it directly instead of forcing a fresh (SAML) reconnect.
+            let alreadyReachable = await Task.detached {
+                SOCKSProbe.canReach(proxyPort: socksPort, targetHost: targetHost, targetPort: targetPort)
+            }.value
+            if alreadyReachable {
+                self.adoptExternalGatewayIfNeeded(gatewayName)
+                self.launchPreparedTunnel(prepared)
+                return
+            }
+
+            // Otherwise bring the gateway up (no-op if already starting/running).
+            guard self.startGateway(named: gatewayName, allowPasswordPrompt: allowGatewayPrompt) else {
+                self.updateState(for: prepared.name, isRunning: false, state: .failed, message: "Gateway \(gatewayName) is not running")
+                return
+            }
+
             let deadline = Date().addingTimeInterval(180)
             while Date() < deadline {
-                guard let self else {
-                    return
-                }
                 if self.tasks[prepared.name] != nil {
                     return
                 }
-                if self.gatewayTasks[gatewayName] == nil && self.activeSAMLAuthenticators[gatewayName] == nil {
-                    self.updateState(for: prepared.name, isRunning: false, state: .failed, message: "Gateway \(gatewayName) did not connect")
-                    return
-                }
+                let owned = self.gatewayTasks[gatewayName] != nil || self.activeSAMLAuthenticators[gatewayName] != nil
                 // Readiness = the proxy can resolve and reach the tunnel's host,
                 // not merely that ocproxy's listener is open. ocproxy accepts
                 // connections seconds before the VPN's DNS is usable; launching
-                // ssh in that window fails as "could not resolve hostname" and
-                // shows up as a DNS error.
+                // ssh in that window fails as "could not resolve hostname."
                 let reachable = await Task.detached {
                     SOCKSProbe.canReach(proxyPort: socksPort, targetHost: targetHost, targetPort: targetPort)
                 }.value
                 if reachable {
+                    self.adoptExternalGatewayIfNeeded(gatewayName)
                     self.launchPreparedTunnel(prepared)
+                    return
+                }
+                if !owned {
+                    self.updateState(for: prepared.name, isRunning: false, state: .failed, message: "Gateway \(gatewayName) did not connect")
                     return
                 }
                 try? await Task.sleep(for: .milliseconds(800))
             }
-            self?.updateState(for: prepared.name, isRunning: false, state: .failed, message: "Timed out waiting for gateway \(gatewayName)")
+            self.updateState(for: prepared.name, isRunning: false, state: .failed, message: "Timed out waiting for gateway \(gatewayName)")
         }
+    }
+
+    /// Reflects an externally-running (adopted) gateway as connected in the UI
+    /// when Burrow itself didn't start it this session.
+    private func adoptExternalGatewayIfNeeded(_ name: String) {
+        guard gatewayTasks[name] == nil,
+              let index = gateways.firstIndex(where: { $0.id == name }),
+              gateways[index].connectionState != .connected else {
+            return
+        }
+        gateways[index].isRunning = true
+        gateways[index].connectionState = .connected
+        gateways[index].lastMessage = "Connected (existing session)"
     }
 
     fileprivate func updateGatewayState(for name: String, isRunning: Bool, state: ConnectionState? = nil, message: String) {
@@ -1306,26 +1333,11 @@ final class MenuBarViewModel: ObservableObject {
             }
         }
 
-        guard allowPasswordPrompt else {
-            throw ConnectionPreparationError.missingSavedPassword(credentialKey.account)
-        }
-
-        guard let password = PasswordPrompt.requestPassword(
-            for: credentialKey,
-            tunnelName: tunnel.name,
-            retry: isRetry
-        ) else {
-            throw ConnectionPreparationError.cancelledPasswordPrompt
-        }
-
-        sessionPasswords[credentialKey] = password
-        sessionPasswordsByHostUser[hostUserKey] = password
-
-        return ConnectionPreparation(
-            environment: try AskPassSupport.environment(password: password),
-            pendingSave: PendingCredentialSave(key: credentialKey, password: password),
-            credentialSource: .prompted(credentialKey)
-        )
+        // No stored password. Don't prompt up front — launch without an askpass
+        // helper so ssh tries publickey/agent first. Key-authenticated tunnels
+        // (very common) then never see a password dialog. If ssh actually
+        // rejects auth, finishTunnel prompts lazily and retries.
+        return ConnectionPreparation(environment: [:], pendingSave: nil, credentialSource: .none)
     }
 
     private func preparedTunnelForLaunch(_ tunnel: TunnelConfig) throws -> TunnelConfig {
@@ -1374,8 +1386,10 @@ final class MenuBarViewModel: ObservableObject {
     fileprivate func finishTunnel(named name: String) {
         tasks[name] = nil
         pendingCredentialSaves[name] = nil
-        let shouldPromptAgain = sawAuthenticationFailure.contains(name) && shouldAutoPromptAgain(for: name)
-        if sawAuthenticationFailure.contains(name) {
+
+        let authFailed = sawAuthenticationFailure.contains(name)
+        let priorSource = activeCredentialSources[name]
+        if authFailed {
             handleAuthenticationFailure(for: name)
         }
         activeCredentialSources[name] = nil
@@ -1383,12 +1397,41 @@ final class MenuBarViewModel: ObservableObject {
         clearRetryIndicator(for: name, resetAttempt: true)
         let state: ConnectionState = tunnels.first(where: { $0.id == name })?.connectionState == .failed ? .failed : .disconnected
         updateState(for: name, isRunning: false, state: state, message: state == .failed ? "Connect failed" : "Stopped")
-        if shouldPromptAgain {
-            authRePromptCounts[name, default: 0] += 1
-            globalMessage = "Credentials for \(name) were rejected. Prompting to re-enter password."
-            Task { @MainActor [weak self] in
-                self?.startTunnel(named: name)
-            }
+
+        guard authFailed else {
+            return
+        }
+
+        // ssh rejected authentication. Now — and only now — prompt for a
+        // password and retry, so key-authenticated tunnels never see a dialog.
+        // A "retry" prompt means a password we supplied was the one rejected.
+        let passwordWasTried: Bool
+        switch priorSource {
+        case .keychain, .prompted:
+            passwordWasTried = true
+        default:
+            passwordWasTried = false
+        }
+
+        guard tunnelPromptAllowed[name] == true,
+              shouldAutoPromptAgain(for: name),
+              let tunnel = tunnels.first(where: { $0.id == name })?.tunnel,
+              let credentialKey = TunnelCredentialKey(tunnel: tunnel) else {
+            return
+        }
+
+        guard let password = PasswordPrompt.requestPassword(for: credentialKey, tunnelName: name, retry: passwordWasTried),
+              !password.isEmpty else {
+            return
+        }
+
+        sessionPasswords[credentialKey] = password
+        sessionPasswordsByHostUser[credentialKey.hostUserKey] = password
+        invalidCredentialKeys.remove(credentialKey)
+        authRePromptCounts[name, default: 0] += 1
+        globalMessage = "Reconnecting \(name) with the password you entered."
+        Task { @MainActor [weak self] in
+            self?.startTunnel(named: name)
         }
     }
 
