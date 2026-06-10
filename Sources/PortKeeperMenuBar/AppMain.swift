@@ -110,6 +110,8 @@ final class MenuBarViewModel: ObservableObject {
     private var invalidGatewayCredentialKeys: Set<TunnelCredentialKey> = []
     private var activeSAMLAuthenticators: [String: GPSAMLAuthenticator] = [:]
     private var toolInstallWatchTask: Task<Void, Never>?
+    private var samlSessionConnectedAt: [String: Date] = [:]
+    private var samlReauthAttempts: [String: Int] = [:]
     private var hasStartedAutoConnect = false
     private var pendingCredentialSaves: [String: PendingCredentialSave] = [:]
     private var activeCredentialSources: [String: CredentialSource] = [:]
@@ -828,19 +830,20 @@ final class MenuBarViewModel: ObservableObject {
         }
 
         if gateway.usesSAML {
-            guard allowPasswordPrompt else {
-                updateGatewayState(for: name, isRunning: false, state: .failed, message: "SAML sign-in needed — click Connect")
-                return false
-            }
-
             if gateway.vpnProtocol.lowercased() == "gp" {
                 guard activeSAMLAuthenticators[name] == nil else {
                     return true
                 }
-                updateGatewayState(for: name, isRunning: false, state: .connecting, message: "Waiting for SAML sign-in")
+                // The IdP session persists in the web view, so sign-in usually
+                // completes silently: connects show no window unless needed,
+                // and headless auto-starts never show one at all.
+                let policy: GPSAMLAuthenticator.InteractionPolicy = allowPasswordPrompt
+                    ? .showAfter(2.5)
+                    : .silentOnly(25)
+                updateGatewayState(for: name, isRunning: false, state: .connecting, message: "Signing in (SAML)")
                 let authenticator = GPSAMLAuthenticator(gateway: gateway)
                 activeSAMLAuthenticators[name] = authenticator
-                authenticator.begin { [weak self] result in
+                authenticator.begin(policy: policy) { [weak self] result in
                     guard let self else {
                         return
                     }
@@ -858,8 +861,12 @@ final class MenuBarViewModel: ObservableObject {
                 return true
             }
 
-            // AnyConnect-style SAML: openconnect opens the default browser and
-            // receives the token on a localhost redirect.
+            // AnyConnect-style SAML opens the system browser, which can't be
+            // done silently — only on an explicit Connect.
+            guard allowPasswordPrompt else {
+                updateGatewayState(for: name, isRunning: false, state: .failed, message: "SAML sign-in needed — click Connect")
+                return false
+            }
             spawnGatewaySupervisor(gateway, credential: .samlExternalBrowser)
             globalMessage = "Gateway \(name): complete the sign-in in your browser."
             return true
@@ -948,6 +955,9 @@ final class MenuBarViewModel: ObservableObject {
             activeSAMLAuthenticators[name] = nil
             authenticator.cancel()
         }
+        // A deliberate stop must not trigger automatic SAML re-sign-in.
+        samlSessionConnectedAt[name] = nil
+        samlReauthAttempts[name] = 0
 
         guard let task = gatewayTasks[name] else {
             updateGatewayState(for: name, isRunning: false, state: .disconnected, message: "Not running")
@@ -989,7 +999,9 @@ final class MenuBarViewModel: ObservableObject {
             return
         }
 
-        if PortProbe.canConnect(host: "127.0.0.1", port: gatewayConfig.socksPort) {
+        // An open port alone isn't proof of health: it could be an orphaned
+        // ocproxy from a dead session. Trust it only when we own the gateway.
+        if gatewayTasks[gatewayName] != nil && PortProbe.canConnect(host: "127.0.0.1", port: gatewayConfig.socksPort) {
             launchPreparedTunnel(prepared)
             return
         }
@@ -1048,11 +1060,40 @@ final class MenuBarViewModel: ObservableObject {
         }
     }
 
+    fileprivate func markGatewayConnected(named name: String) {
+        samlSessionConnectedAt[name] = Date()
+        samlReauthAttempts[name] = 0
+    }
+
     fileprivate func finishGateway(named name: String) {
         gatewayTasks[name] = nil
         pendingGatewayCredentialSaves[name] = nil
+        let connectedAt = samlSessionConnectedAt.removeValue(forKey: name)
         let state: ConnectionState = gateways.first(where: { $0.id == name })?.connectionState == .failed ? .failed : .disconnected
         updateGatewayState(for: name, isRunning: false, state: state, message: state == .failed ? "VPN connection failed" : "Stopped")
+
+        // SAML cookies are single-use, so a dropped session can't simply
+        // retry — but the IdP session usually allows a silent re-sign-in.
+        // Guarded so a flapping gateway can't loop: the session must have
+        // genuinely connected and lived a while, with few recent attempts.
+        guard let gateway = gateways.first(where: { $0.id == name })?.config,
+              gateway.usesSAML,
+              gateway.vpnProtocol.lowercased() == "gp",
+              let connectedAt,
+              Date().timeIntervalSince(connectedAt) > 30,
+              samlReauthAttempts[name, default: 0] < 3 else {
+            return
+        }
+
+        samlReauthAttempts[name, default: 0] += 1
+        globalMessage = "Gateway \(name) dropped — signing in again."
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self, self.gatewayTasks[name] == nil, self.activeSAMLAuthenticators[name] == nil else {
+                return
+            }
+            self.startGateway(named: name)
+        }
     }
 
     fileprivate func persistGatewayPasswordIfNeeded(for name: String) {
@@ -1077,7 +1118,7 @@ final class MenuBarViewModel: ObservableObject {
             return
         }
 
-        if PortProbe.canConnect(host: "127.0.0.1", port: gateway.socksPort) {
+        if gatewayTasks[name] != nil && PortProbe.canConnect(host: "127.0.0.1", port: gateway.socksPort) {
             launchBrowser(browser, through: gateway)
             return
         }
@@ -1491,6 +1532,7 @@ final class GatewayEventBridge: @unchecked Sendable {
                 self.owner?.updateGatewayState(for: self.gatewayName, isRunning: true, state: .connecting, message: "Connecting VPN")
             case .connected:
                 self.owner?.persistGatewayPasswordIfNeeded(for: self.gatewayName)
+                self.owner?.markGatewayConnected(named: self.gatewayName)
                 self.owner?.updateGatewayState(for: self.gatewayName, isRunning: true, state: .connected, message: "Connected")
                 self.owner?.globalMessage = "Gateway \(self.gatewayName) connected."
             case .certificateUntrusted(let suggestedPin):

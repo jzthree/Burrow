@@ -212,6 +212,63 @@ public enum GatewayLinker {
     }
 }
 
+/// openconnect does not reliably terminate its --script child on exit, so a
+/// dead session can leave ocproxy holding the SOCKS port: every connection
+/// then enters a proxy with no VPN behind it, and the replacement ocproxy
+/// cannot bind. Reap such listeners before starting a session.
+public enum GatewayPortReclaimer {
+    public static func reclaimStaleListeners(port: Int, logger: @Sendable (String) -> Void = { _ in }) {
+        for pid in listeningPIDs(port: port) {
+            let name = processName(pid) ?? "?"
+            guard name.contains("ocproxy") || name.contains("openconnect") else {
+                logger("port \(port) is held by '\(name)' (pid \(pid)); leaving it alone")
+                continue
+            }
+            logger("reclaiming stale \(name) (pid \(pid)) on port \(port)")
+            kill(pid, SIGTERM)
+            usleep(300_000)
+            if kill(pid, 0) == 0 {
+                kill(pid, SIGKILL)
+            }
+        }
+    }
+
+    private static func listeningPIDs(port: Int) -> [pid_t] {
+        let lsof = Process()
+        lsof.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        lsof.arguments = ["-nP", "-t", "-iTCP:\(port)", "-sTCP:LISTEN"]
+        let pipe = Pipe()
+        lsof.standardOutput = pipe
+        lsof.standardError = Pipe()
+        do {
+            try lsof.run()
+            lsof.waitUntilExit()
+        } catch {
+            return []
+        }
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return output.split(whereSeparator: \.isNewline).compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }
+    }
+
+    private static func processName(_ pid: pid_t) -> String? {
+        let ps = Process()
+        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+        ps.arguments = ["-o", "comm=", "-p", "\(pid)"]
+        let pipe = Pipe()
+        ps.standardOutput = pipe
+        ps.standardError = Pipe()
+        do {
+            try ps.run()
+            ps.waitUntilExit()
+        } catch {
+            return nil
+        }
+        let name = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (name?.isEmpty ?? true) ? nil : name
+    }
+}
+
 public final class GatewaySupervisor: @unchecked Sendable {
     private let gateway: GatewayConfig
     private let credential: GatewayCredential
@@ -242,6 +299,12 @@ public final class GatewaySupervisor: @unchecked Sendable {
                     }
                     eventHandler(.exited(result.exitCode, result.diagnostic))
                     let suffix = result.diagnostic.map { " \($0)" } ?? ""
+                    if case .samlCookie = credential {
+                        // The one-time SAML cookie is spent; the app re-runs
+                        // the sign-in instead of looping on a dead credential.
+                        logger("[gateway \(gateway.name)] openconnect exited with code \(result.exitCode).\(suffix) SAML session ended; a fresh sign-in is required.")
+                        break
+                    }
                     logger("[gateway \(gateway.name)] openconnect exited with code \(result.exitCode).\(suffix) Reconnecting in \(gateway.reconnectDelaySeconds)s.")
                 } catch let error as AuthenticationFailureError {
                     if Task.isCancelled {
@@ -290,6 +353,8 @@ public final class GatewaySupervisor: @unchecked Sendable {
         guard let ocproxyPath = GatewayCommandBuilder.ocproxyPath() else {
             throw GatewayError("ocproxy not found. Install it with: brew install ocproxy")
         }
+
+        GatewayPortReclaimer.reclaimStaleListeners(port: gateway.socksPort, logger: logger)
 
         let runState = RunState()
         let process = Process()

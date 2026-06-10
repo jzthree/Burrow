@@ -20,6 +20,7 @@ final class GPSAMLAuthenticator: NSObject, WKNavigationDelegate, NSWindowDelegat
     enum SAMLError: LocalizedError {
         case preloginFailed(String)
         case cancelled
+        case interactionRequired
 
         var errorDescription: String? {
             switch self {
@@ -27,8 +28,21 @@ final class GPSAMLAuthenticator: NSObject, WKNavigationDelegate, NSWindowDelegat
                 return message
             case .cancelled:
                 return "SAML sign-in was cancelled."
+            case .interactionRequired:
+                return "SAML sign-in needs attention — click Connect"
             }
         }
+    }
+
+    /// The IdP session persists in the web view's storage, so sign-in often
+    /// completes with no interaction. The policy controls whether and when
+    /// the window becomes visible.
+    enum InteractionPolicy {
+        case showImmediately
+        /// Try silently; reveal the window if not finished after the delay.
+        case showAfter(TimeInterval)
+        /// Never show a window; fail with `.interactionRequired` on timeout.
+        case silentOnly(TimeInterval)
     }
 
     private let gateway: GatewayConfig
@@ -36,12 +50,15 @@ final class GPSAMLAuthenticator: NSObject, WKNavigationDelegate, NSWindowDelegat
     private var webView: WKWebView?
     private var completion: ((Result<SAMLResult, Error>) -> Void)?
     private var headerUsername: String?
+    private var policy: InteractionPolicy = .showImmediately
+    private var revealTask: Task<Void, Never>?
 
     init(gateway: GatewayConfig) {
         self.gateway = gateway
     }
 
-    func begin(completion: @escaping (Result<SAMLResult, Error>) -> Void) {
+    func begin(policy: InteractionPolicy = .showImmediately, completion: @escaping (Result<SAMLResult, Error>) -> Void) {
+        self.policy = policy
         self.completion = completion
         Task { @MainActor in
             do {
@@ -156,6 +173,32 @@ final class GPSAMLAuthenticator: NSObject, WKNavigationDelegate, NSWindowDelegat
             return
         }
 
+        switch policy {
+        case .showImmediately:
+            reveal()
+        case .showAfter(let delay):
+            revealTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(delay))
+                guard let self, !Task.isCancelled, self.completion != nil else {
+                    return
+                }
+                self.reveal()
+            }
+        case .silentOnly(let timeout):
+            revealTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(timeout))
+                guard let self, !Task.isCancelled, self.completion != nil else {
+                    return
+                }
+                self.finish(.failure(SAMLError.interactionRequired))
+            }
+        }
+    }
+
+    private func reveal() {
+        guard let window else {
+            return
+        }
         MenuBarPopover.dismiss()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -227,6 +270,8 @@ final class GPSAMLAuthenticator: NSObject, WKNavigationDelegate, NSWindowDelegat
             return
         }
         self.completion = nil
+        revealTask?.cancel()
+        revealTask = nil
         if closeWindow {
             window?.delegate = nil
             window?.close()

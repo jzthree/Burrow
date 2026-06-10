@@ -7,6 +7,12 @@ APP_NAME="Burrow"
 EXECUTABLE_NAME="Burrow"
 BUNDLE_ID="${BURROW_BUNDLE_ID:-com.jianzhou.burrow}"
 APP_DIR="${BURROW_APP_DIR:-${PORTKEEPER_APP_DIR:-$HOME/Applications/${APP_NAME}.app}}"
+# Prefer a stable signing identity so Keychain "Always Allow" decisions
+# survive rebuilds; ad-hoc signing gives the app a new identity every build,
+# which re-triggers password prompts on each update.
+if [ -z "${SIGNING_IDENTITY:-}" ]; then
+  SIGNING_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development/{print $2; exit}')"
+fi
 SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
 BUILD_CONFIGURATION="${BUILD_CONFIGURATION:-release}"
 
