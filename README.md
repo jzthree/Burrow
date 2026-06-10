@@ -1,25 +1,30 @@
 # Burrow
 
-Burrow is a macOS SSH tunnel manager for people who keep too many terminal tabs open just to babysit port forwards.
+Burrow is a macOS SSH tunnel manager for people who keep too many terminal tabs open just to babysit port forwards — and too many VPN clients fighting over the routing table.
 
-It keeps tunnel definitions in one config file, runs them with the system `ssh`, reconnects when sessions drop, and gives you a native menu-bar UI for the day-to-day work: see what is up, understand what is retrying, restart what failed, and get back to the thing you were actually doing.
+It keeps tunnel definitions in one config file, runs them with the system `ssh`, reconnects when sessions drop, and gives you a native menu-bar UI for the day-to-day work: see what is up, understand what is retrying, restart what failed, and get back to the thing you were actually doing. It can also supervise userspace VPN gateways (GlobalProtect, AnyConnect, …) as local SOCKS proxies, route individual tunnels through them, and never touch a routing table while doing it.
 
 <p align="center">
-  <img src="docs/assets/burrow-menu.svg" alt="Burrow menu-bar app showing grouped SSH tunnels, retry status, auto-connect controls, and the new tunnel editor with autofill" width="880">
+  <img src="docs/assets/burrow-menu.svg" alt="Burrow menu-bar app showing VPN gateways, grouped SSH tunnels with per-host gateway selection, live retry countdowns, and quick actions" width="1000">
 </p>
 
 ## Highlights
 
-- Native macOS menu-bar app with grouped endpoints, status dots, quick reconnect, edit, duplicate, and delete actions.
-- Smart tunnel editor with autofill suggestions from existing hosts, users, SSH ports, identity files, jump hosts, and destination ports.
-- CLI for creating, listing, enabling, disabling, and running tunnels from the terminal.
-- One central JSON config at `~/Library/Application Support/Burrow/config.json`.
-- Auto-connect on launch for enabled tunnels without letting one missing password block the rest.
-- Automatic reconnect when an SSH process exits unexpectedly.
-- Stale process reclamation for Burrow-owned forwards, so old port listeners do not silently block new sessions.
-- Connection status only turns green after the launched SSH process owns the local listener, avoiding misleading false positives from stale ports.
-- Password auth support through macOS Keychain in the menu-bar app, with passwords saved only after a successful connection and legacy PortKeeper credentials reused when available.
-- No custom SSH stack: Burrow builds commands and supervises `/usr/bin/ssh`.
+- Native macOS menu-bar app with host-grouped tunnels, status dots, quick reconnect, edit, duplicate, and delete actions.
+- VPN gateways: openconnect + ocproxy run AnyConnect/GlobalProtect/Pulse/Fortinet VPNs entirely in userspace as local SOCKS5 ports — no root, no tun device, no routing changes, multiple VPNs at once, friendly with Tailscale.
+- Browser-based SAML sign-in for VPNs (embedded window for GlobalProtect, external browser for AnyConnect) plus one-click server certificate pinning.
+- Per-host gateway dropdown in the menu: pick which VPN (or direct) each host's tunnels ride; running tunnels restart onto the new route.
+- Open Chrome/Edge/Brave proxied through a gateway with one click, in an isolated profile — normal browsing stays off the VPN.
+- Click a tunnel's port chip to copy `localhost:PORT`; row menu opens local forwards in the browser.
+- Failed tunnels show a classified diagnosis and a live retry countdown ("network issue · retry 3 in 4s").
+- Smart tunnel editor in its own window, with autofill from existing tunnels and `~/.ssh/config`, live local-port conflict warnings, and a gateway picker.
+- Import tunnels from `~/.ssh/config` (LocalForward/RemoteForward/DynamicForward), and autodetect VPN servers from installed GlobalProtect/AnyConnect clients.
+- One central JSON config at `~/Library/Application Support/Burrow/config.json`, watched live — CLI or hand edits appear without a reload.
+- Generated ssh include file routes plain `ssh somehost` through the right gateway by host pattern.
+- Start at Login option, auto-connect on launch, automatic reconnect, and stale-process reclamation for Burrow-owned forwards.
+- Connection status only turns green after the launched SSH process owns the local listener, avoiding false positives from stale ports.
+- Passwords (SSH and VPN) live in the macOS Keychain, saved only after a successful connection.
+- No custom SSH or VPN stack: Burrow builds commands and supervises `/usr/bin/ssh` and `openconnect`.
 
 ## Quick Start
 
@@ -62,21 +67,23 @@ Or run the menu-bar app:
 
 The app sits in the macOS top bar and focuses on operational tunnel work:
 
-- `Connect` or `Stop` individual tunnels.
-- Toggle whether a tunnel auto-connects on launch.
-- Let enabled tunnels keep retrying across VPN, DNS, or network changes.
-- See retrying or failed sessions without marking them connected until the local forward is actually owned by the SSH process Burrow launched.
-- Inspect details, recent logs, and the generated SSH command.
-- Edit, duplicate, or delete saved tunnel configs.
-- Reload the config after CLI edits.
+- `Connect` or `Stop` individual tunnels and VPN gateways; the bolt toggle controls auto-connect per tunnel.
+- Pick a gateway per host from the dropdown chip on each host group, or per tunnel from the row menu.
+- Click a port chip to copy `localhost:PORT`; the row menu copies addresses and opens local forwards in the browser.
+- Failed rows replace the route with a diagnosis and live retry countdown; the route and full error stay one hover away.
+- Let enabled tunnels keep retrying across VPN, DNS, or network changes; "Stop Retrying" is in the row menu when you want quiet.
+- Inspect details, recent logs, and the generated SSH or openconnect command.
+- Config changes from the CLI or an editor appear live — no manual reload needed.
+- Settings menu: New VPN Gateway, Import from SSH Config, Copy SSH Config Include Line, Start at Login, Reload, Edit JSON, Quit.
 
-## New Tunnel Editor
+## Tunnel Editor
 
-The editor keeps the common path short:
+The editor opens in its own window (it survives clicks outside the menu) and keeps the common path short:
 
-- Visible by default: tunnel name, SSH host, user, SSH port, local port, destination host, and destination port.
+- Visible by default: tunnel name, SSH host, user, SSH port, gateway, local port, destination host, and destination port.
 - Hidden behind `Advanced SSH settings`: identity file, jump host, keepalive, reconnect delay, bind address, remote/dynamic forwarding, and raw SSH options.
-- `Autofill` uses the host you entered to copy likely values from existing tunnels, preferring exact host/port matches for usernames and host/user matches for identity files.
+- `Autofill` uses the host you entered to copy likely values from existing tunnels and from `~/.ssh/config`.
+- Live warnings when the local port collides with another tunnel or an existing listener.
 - New tunnels suggest the next unused local port and common destination ports such as `3000` or `8888`.
 
 Install it as a stable app bundle:
@@ -127,6 +134,45 @@ Forward syntax:
 - Local: `[bind_address:]local_port:dest_host:dest_port`
 - Remote: `[bind_address:]remote_port:dest_host:dest_port`
 - Dynamic SOCKS: `[bind_address:]socks_port`
+
+## VPN Gateways
+
+Burrow can supervise userspace VPNs the same way it supervises tunnels. A gateway runs `openconnect` (AnyConnect, GlobalProtect, Pulse, Fortinet, …) with `ocproxy`, exposing the VPN as a local SOCKS5 port — no tun device, no root, no routing-table changes, so multiple gateways coexist with each other and with system VPNs like Tailscale.
+
+```bash
+brew install openconnect ocproxy
+```
+
+Create gateways from the menu-bar app (the `+` button in the VPN Gateways section, or Settings → New VPN Gateway…) or define them in the config:
+
+```json
+{
+  "gateways": [
+    {
+      "name": "campus",
+      "protocol": "gp",
+      "server": "vpn.example.edu",
+      "user": "alice",
+      "socksPort": 11080,
+      "authMode": "saml",
+      "sshHostPatterns": ["*.example.edu", "172.18.*"]
+    }
+  ],
+  "tunnels": [
+    { "name": "hpc-jupyter", "gateway": "campus", "...": "..." }
+  ]
+}
+```
+
+- Tunnels with a `gateway` automatically get `ProxyCommand` via the gateway's SOCKS port; starting such a tunnel starts the gateway first and waits for it to come up (Duo-style approvals included).
+- `authMode: "saml"` handles browser-based single sign-on: GlobalProtect logins open in an embedded sign-in window (Burrow captures the prelogin cookie for openconnect), AnyConnect uses openconnect's external-browser flow. Your IdP session persists between connects, so re-auth is usually instant.
+- With `authMode: "password"`, VPN passwords live in the macOS Keychain, saved after the first successful connection.
+- If openconnect rejects the server certificate (it uses its own CA bundle, not the macOS Keychain), Burrow shows the suggested `pin-sha256` fingerprint and offers Trust and Reconnect — the pin is saved to the gateway's extra arguments.
+- `sshHostPatterns` (comma-separated, wildcards allowed) generates an ssh include file so plain `ssh somehost.example.edu` also routes through the gateway: Settings → "Copy SSH Config Include Line", paste into `~/.ssh/config` once.
+- Each host group in the menu has a gateway dropdown; switching it re-routes and restarts that host's tunnels.
+- The gateway's row menu can open Chrome/Edge/Brave through the VPN in an isolated browser profile (DNS included). Safari is excluded by design — it only honors the system-wide proxy, which Burrow never touches.
+- The gateway editor autodetects servers from installed GlobalProtect and AnyConnect clients.
+- Gateways appear in the menu with the same status/Connect/Stop controls as tunnels.
 
 ## Config
 

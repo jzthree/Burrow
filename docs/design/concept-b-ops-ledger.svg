@@ -1,0 +1,124 @@
+<svg width="520" height="720" viewBox="0 0 520 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="24" y="14" width="472" height="692" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="18" stdDeviation="28" flood-color="#111827" flood-opacity="0.16"/>
+      <feDropShadow dx="0" dy="1" stdDeviation="3" flood-color="#111827" flood-opacity="0.10"/>
+    </filter>
+    <style>
+      .ui { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif; }
+      .mono { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; }
+      .title { font-size: 24px; font-weight: 780; letter-spacing: -0.5px; fill: #111827; }
+      .caption { font-size: 12px; font-weight: 640; letter-spacing: .7px; fill: #8A93A1; }
+      .endpoint { font-size: 11.5px; font-weight: 760; fill: #5E6977; }
+      .name { font-size: 14px; font-weight: 740; fill: #111827; }
+      .route { font-size: 13px; font-weight: 620; fill: #344054; }
+      .meta { font-size: 11px; font-weight: 680; fill: #98A2B3; }
+      .chip { font-size: 12px; font-weight: 760; }
+      .button { font-size: 12.5px; font-weight: 760; }
+    </style>
+  </defs>
+
+  <rect width="520" height="720" rx="34" fill="#EEF2F6"/>
+  <g filter="url(#shadow)" class="ui">
+    <rect x="52" y="34" width="416" height="650" rx="24" fill="#FFFFFF"/>
+    <rect x="52.5" y="34.5" width="415" height="649" rx="23.5" stroke="#D9E1EA"/>
+
+    <g transform="translate(76 68)">
+      <text class="title" x="0" y="0">Burrow</text>
+      <text class="caption" x="0" y="30">SSH TUNNEL CONTROL</text>
+      <g transform="translate(248 -10)">
+        <rect width="116" height="34" rx="17" fill="#F5F7FA"/>
+        <circle cx="18" cy="17" r="4.2" fill="#12B76A"/>
+        <text x="29" y="22" font-size="13" font-weight="760" fill="#667085">2</text>
+        <circle cx="56" cy="17" r="4.2" fill="#F79009"/>
+        <text x="67" y="22" font-size="13" font-weight="760" fill="#667085">1</text>
+        <circle cx="94" cy="17" r="4.2" fill="#F04438"/>
+        <text x="105" y="22" font-size="13" font-weight="760" fill="#667085">2</text>
+      </g>
+    </g>
+
+    <rect x="76" y="126" width="368" height="42" rx="12" fill="#FFF8F2" stroke="#F6E4D2"/>
+    <path d="M96 139L84 158H108L96 139Z" fill="#F79009"/>
+    <text x="120" y="152" font-size="13" font-weight="700" fill="#7A4B19">notebook-api</text>
+    <text x="212" y="152" font-size="13" font-weight="560" fill="#8A6A4C">ssh exited with code 255</text>
+
+    <g transform="translate(76 198)">
+      <text class="mono endpoint" x="0" y="0">100.64.0.42:3333</text>
+      <line x1="0" y1="13" x2="368" y2="13" stroke="#E6EBF0"/>
+      <text class="meta" x="0" y="36">STATUS</text>
+      <text class="meta" x="58" y="36">TUNNEL</text>
+      <text class="meta" x="184" y="36">FORWARD</text>
+      <text class="meta" x="303" y="36">ACTION</text>
+      <g transform="translate(0 50)">
+        <rect width="368" height="46" rx="12" fill="#FCFDFD" stroke="#EDF1F5"/>
+        <circle cx="18" cy="23" r="6.5" fill="#12B76A"/>
+        <text class="name" x="58" y="19">sp-8875-web3000</text>
+        <text class="mono route" x="184" y="29">8875 -> 3000</text>
+        <g transform="translate(284 9)">
+          <rect width="54" height="28" rx="14" fill="#F8FAFC" stroke="#E2E8F0"/>
+          <text x="17" y="19" class="button" fill="#C2413B">Stop</text>
+        </g>
+        <text x="349" y="29" font-size="22" font-weight="800" fill="#667085">...</text>
+      </g>
+    </g>
+
+    <g transform="translate(76 328)">
+      <text class="mono endpoint" x="0" y="0">100.64.0.42:4444</text>
+      <line x1="0" y1="13" x2="368" y2="13" stroke="#E6EBF0"/>
+      <g transform="translate(0 29)">
+        <rect width="368" height="98" rx="12" fill="#FCFDFD" stroke="#EDF1F5"/>
+        <circle cx="18" cy="26" r="6.5" fill="#F04438"/>
+        <text class="name" x="58" y="22">notebook-api</text>
+        <text class="mono route" x="184" y="31">8866 -> 3000</text>
+        <circle cx="154" cy="26" r="13" fill="#FEE4E2"/>
+        <circle cx="154" cy="26" r="7.5" fill="#B42318"/>
+        <text x="151" y="31" font-size="10" font-weight="800" fill="#FFFFFF">i</text>
+        <g transform="translate(284 12)">
+          <rect width="54" height="28" rx="14" fill="#F8FAFC" stroke="#E2E8F0"/>
+          <text x="17" y="19" class="button" fill="#C2413B">Stop</text>
+        </g>
+        <text x="349" y="32" font-size="22" font-weight="800" fill="#667085">...</text>
+        <line x1="58" y1="49" x2="368" y2="49" stroke="#EDF1F5"/>
+        <circle cx="18" cy="75" r="6.5" fill="#12B76A"/>
+        <text class="name" x="58" y="71">sp-8876-web8888</text>
+        <text class="mono route" x="184" y="80">8876 -> 8888</text>
+        <g transform="translate(284 61)">
+          <rect width="54" height="28" rx="14" fill="#F8FAFC" stroke="#E2E8F0"/>
+          <text x="17" y="19" class="button" fill="#C2413B">Stop</text>
+        </g>
+      </g>
+    </g>
+
+    <g transform="translate(76 502)">
+      <text class="mono endpoint" x="0" y="0">cluster.example.edu:22</text>
+      <line x1="0" y1="13" x2="368" y2="13" stroke="#E6EBF0"/>
+      <g transform="translate(0 29)">
+        <rect width="368" height="50" rx="12" fill="#FCFDFD" stroke="#EDF1F5"/>
+        <circle cx="18" cy="25" r="6.5" fill="#F04438"/>
+        <text class="name" x="58" y="21">cluster-web</text>
+        <text class="mono route" x="184" y="30">4000 -> 172...</text>
+        <circle cx="154" cy="25" r="13" fill="#FEE4E2"/>
+        <circle cx="154" cy="25" r="7.5" fill="#B42318"/>
+        <text x="151" y="30" font-size="10" font-weight="800" fill="#FFFFFF">i</text>
+        <g transform="translate(270 10)">
+          <rect width="70" height="30" rx="15" fill="#1570EF"/>
+          <text x="14" y="20" class="button" fill="#FFFFFF">Connect</text>
+        </g>
+        <text x="349" y="31" font-size="22" font-weight="800" fill="#667085">...</text>
+      </g>
+    </g>
+
+    <line x1="76" y1="615" x2="444" y2="615" stroke="#E6EBF0"/>
+    <g transform="translate(76 638)">
+      <rect width="122" height="32" rx="10" fill="#F2F4F7"/>
+      <path d="M18 10L31 16L18 22V10Z" fill="#111827"/>
+      <text x="44" y="21" font-size="14" font-weight="700" fill="#111827">Start Enabled</text>
+      <rect x="136" width="91" height="32" rx="10" fill="#F2F4F7"/>
+      <rect x="153" y="10" width="12" height="12" rx="2.5" fill="#111827"/>
+      <text x="178" y="21" font-size="14" font-weight="700" fill="#111827">Stop All</text>
+      <rect x="255" width="113" height="32" rx="10" fill="#1570EF"/>
+      <path d="M273 9V23M266 16H280" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+      <text x="293" y="21" font-size="14" font-weight="750" fill="#FFFFFF">New Tunnel</text>
+    </g>
+  </g>
+</svg>

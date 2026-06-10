@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "19EFB357F08F61B404C9EC73"
+               BlueprintIdentifier = "71FE4B43F30535A3A0BBD5E7"
                BuildableName = "Burrow.app"
                BlueprintName = "Burrow"
                ReferencedContainer = "container:Burrow.xcodeproj">
@@ -30,7 +30,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "19EFB357F08F61B404C9EC73"
+            BlueprintIdentifier = "71FE4B43F30535A3A0BBD5E7"
             BuildableName = "Burrow.app"
             BlueprintName = "Burrow"
             ReferencedContainer = "container:Burrow.xcodeproj">
@@ -53,7 +53,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "19EFB357F08F61B404C9EC73"
+            BlueprintIdentifier = "71FE4B43F30535A3A0BBD5E7"
             BuildableName = "Burrow.app"
             BlueprintName = "Burrow"
             ReferencedContainer = "container:Burrow.xcodeproj">
@@ -70,7 +70,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "19EFB357F08F61B404C9EC73"
+            BlueprintIdentifier = "71FE4B43F30535A3A0BBD5E7"
             BuildableName = "Burrow.app"
             BlueprintName = "Burrow"
             ReferencedContainer = "container:Burrow.xcodeproj">

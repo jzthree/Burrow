@@ -1,0 +1,370 @@
+<svg width="980" height="1240" viewBox="0 0 980 1240" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="panelShadow" x="10" y="0" width="960" height="1225" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="22" stdDeviation="28" flood-color="#0F172A" flood-opacity="0.18"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.12"/>
+    </filter>
+    <filter id="softInset" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="1" stdDeviation="0.6" flood-color="#FFFFFF" flood-opacity="0.9"/>
+    </filter>
+    <linearGradient id="panel" x1="490" y1="28" x2="490" y2="1082" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F7F8F8"/>
+    </linearGradient>
+    <linearGradient id="message" x1="63" y1="116" x2="917" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF6F1"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <linearGradient id="connect" x1="768" y1="542" x2="866" y2="542" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0D84FF"/>
+      <stop offset="1" stop-color="#4632E5"/>
+    </linearGradient>
+    <style>
+      .display { font-family: "Avenir Next", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif; }
+      .mono { font-family: "JetBrains Mono", "SF Mono", Menlo, monospace; }
+      .title { font-size: 34px; font-weight: 800; fill: #111418; letter-spacing: -1.2px; }
+      .subtitle { font-size: 15px; font-weight: 650; fill: #848A91; }
+      .chipText { font-size: 17px; font-weight: 800; }
+      .group { font-size: 15px; font-weight: 800; letter-spacing: 2.4px; fill: #98A0A8; }
+      .groupCount { font-size: 15px; font-weight: 800; fill: #9CA3AA; }
+      .name { font-size: 20px; font-weight: 800; fill: #151719; letter-spacing: -0.35px; }
+      .routePort { font-size: 16px; font-weight: 800; fill: #45494E; }
+      .routeText { font-size: 16px; font-weight: 700; fill: #596066; }
+      .hint { font-size: 12px; font-weight: 700; fill: transparent; }
+      .button { font-size: 16px; font-weight: 800; }
+      .footer { font-size: 17px; font-weight: 750; fill: #23262A; }
+    </style>
+  </defs>
+
+  <rect width="980" height="1240" fill="#EEF1F3"/>
+  <g filter="url(#panelShadow)">
+    <rect x="40" y="18" width="900" height="1202" rx="34" fill="url(#panel)" stroke="#CAD0D5"/>
+  </g>
+
+  <g class="display">
+    <text x="72" y="82" class="title">Burrow</text>
+
+    <g transform="translate(602 38)">
+      <rect width="76" height="48" rx="24" fill="#E9FBEF" stroke="#D8F3E0"/>
+      <circle cx="28" cy="24" r="6" fill="#05BF54"/>
+      <text x="45" y="31" class="chipText" fill="#42BF63">3</text>
+    </g>
+    <g transform="translate(692 38)">
+      <rect width="76" height="48" rx="24" fill="#FFF2DF" stroke="#FFE2BF"/>
+      <circle cx="28" cy="24" r="6" fill="#FF8500"/>
+      <text x="45" y="31" class="chipText" fill="#F6A64A">1</text>
+    </g>
+    <g transform="translate(782 38)">
+      <rect width="76" height="48" rx="24" fill="#FFEDEF" stroke="#FFD7DC"/>
+      <circle cx="28" cy="24" r="6" fill="#FF1232"/>
+      <text x="45" y="31" class="chipText" fill="#FF5C68">2</text>
+    </g>
+    <g transform="translate(872 38)">
+      <rect width="48" height="48" rx="24" fill="#F2F3F4" stroke="#E5E7EA"/>
+      <circle cx="18" cy="24" r="6" fill="#9AA0A6"/>
+      <text x="31" y="31" class="chipText" fill="#8B9096">0</text>
+    </g>
+
+    <rect x="62" y="104" width="856" height="44" rx="15" fill="url(#message)"/>
+    <circle cx="82" cy="126" r="5" fill="#F0362F"/>
+    <text x="98" y="132" class="subtitle">sp-8877-web8888: network timeout during banner exchange. Retrying in 5s.</text>
+    <line x1="40" y1="164" x2="940" y2="164" stroke="#E7EAED"/>
+
+    <!-- group 4444 -->
+    <g transform="translate(72 188)">
+      <rect x="0" y="0" width="22" height="22" rx="7" fill="#F3F5F6"/>
+      <path d="M6 7h10v8H6z" stroke="#9AA2AA" stroke-width="1.4" rx="2"/>
+      <path d="M8 10l2 2-2 2M12 14h3" stroke="#9AA2AA" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="38" y="17" class="mono group">100.64.0.42:4444</text>
+      <g transform="translate(746 -5)">
+        <rect width="60" height="32" rx="16" fill="#F5F6F7"/>
+        <circle cx="22" cy="16" r="5" fill="#05BF54"/>
+        <circle cx="36" cy="16" r="5" fill="#FF1232"/>
+        <text x="47" y="22" class="display groupCount">2</text>
+      </g>
+    </g>
+    <rect x="62" y="224" width="856" height="140" rx="24" fill="#FFFFFF" stroke="#E9ECEF"/>
+    <line x1="134" y1="294" x2="918" y2="294" stroke="#ECEFF1"/>
+
+    <g transform="translate(82 239)">
+      <circle cx="16" cy="31" r="15" fill="#FFF2E4"/>
+      <circle cx="16" cy="31" r="7" fill="#FF8500"/>
+      <text x="56" y="30" class="display name">Workstation:8888</text>
+      <g transform="translate(56 43)">
+        <rect width="65" height="30" rx="8" fill="#F1F3F4"/>
+        <text x="13" y="21" class="mono routePort">8876</text>
+        <path d="M91 15h18M102 8l8 7-8 7" stroke="#B8BEC4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="133" y="21" class="mono routeText">8888</text>
+        <circle cx="204" cy="15" r="7" stroke="#B8BEC4" stroke-width="1.4"/>
+        <path d="M197 15h14M204 8c3 3 3 11 0 14M204 8c-3 3-3 11 0 14" stroke="#B8BEC4" stroke-width="1.2"/>
+        <text x="219" y="21" class="mono hint">100.64.0.42</text>
+      </g>
+      <g transform="translate(528 13)">
+        <rect width="96" height="44" rx="22" fill="#EEF3FF" stroke="#D4DFFF" stroke-width="2"/>
+        <path d="M31 11l-12 16h11l-5 12 14-18H28l3-10z" fill="#3D37E6"/>
+        <text x="45" y="28" class="display button" fill="#3D37E6">Auto</text>
+      </g>
+      <g transform="translate(650 13)">
+        <rect width="104" height="44" rx="22" fill="#FFF9F8" stroke="#F1DCD8" stroke-width="1.4"/>
+        <text x="35" y="29" class="display button" fill="#4A4D51">Stop</text>
+      </g>
+      <text x="790" y="40" class="display" font-size="24" font-weight="900" fill="#6A7076">...</text>
+    </g>
+
+    <g transform="translate(82 309)">
+      <circle cx="16" cy="31" r="15" fill="#EAFBF0"/>
+      <circle cx="16" cy="31" r="7" fill="#05BF54"/>
+      <text x="56" y="30" class="display name">workstation:3000</text>
+      <g transform="translate(56 43)">
+        <rect width="65" height="30" rx="8" fill="#F1F3F4"/>
+        <text x="13" y="21" class="mono routePort">8866</text>
+        <path d="M91 15h18M102 8l8 7-8 7" stroke="#B8BEC4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="133" y="21" class="mono routeText">3000</text>
+        <circle cx="204" cy="15" r="7" stroke="#B8BEC4" stroke-width="1.4"/>
+        <path d="M197 15h14M204 8c3 3 3 11 0 14M204 8c-3 3-3 11 0 14" stroke="#B8BEC4" stroke-width="1.2"/>
+        <text x="219" y="21" class="mono hint">100.64.0.42</text>
+      </g>
+      <g transform="translate(528 13)">
+        <rect width="96" height="44" rx="22" fill="#EEF3FF" stroke="#D4DFFF" stroke-width="2"/>
+        <path d="M31 11l-12 16h11l-5 12 14-18H28l3-10z" fill="#3D37E6"/>
+        <text x="45" y="28" class="display button" fill="#3D37E6">Auto</text>
+      </g>
+      <g transform="translate(650 13)">
+        <rect width="104" height="44" rx="22" fill="#FFF9F8" stroke="#F1DCD8" stroke-width="1.4"/>
+        <text x="35" y="29" class="display button" fill="#4A4D51">Stop</text>
+      </g>
+      <text x="790" y="40" class="display" font-size="24" font-weight="900" fill="#6A7076">...</text>
+    </g>
+
+    <!-- group hpc -->
+    <g transform="translate(72 390)">
+      <rect x="0" y="0" width="22" height="22" rx="7" fill="#F3F5F6"/>
+      <path d="M6 7h10v8H6z" stroke="#9AA2AA" stroke-width="1.4"/>
+      <path d="M8 10l2 2-2 2M12 14h3" stroke="#9AA2AA" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="38" y="17" class="mono group">hpc.university.edu:22</text>
+      <g transform="translate(766 -5)">
+        <rect width="40" height="32" rx="16" fill="#F5F6F7"/>
+        <circle cx="18" cy="16" r="5" fill="#FF1232"/>
+        <text x="29" y="22" class="display groupCount">1</text>
+      </g>
+    </g>
+    <rect x="62" y="426" width="856" height="78" rx="24" fill="#FFFFFF" stroke="#E9ECEF"/>
+    <g transform="translate(82 431)">
+      <circle cx="16" cy="31" r="15" fill="#FFEDEF"/>
+      <circle cx="16" cy="31" r="7" fill="#FF1232"/>
+      <text x="56" y="30" class="display name">hpc-4000-web3000</text>
+      <g transform="translate(56 43)">
+        <rect width="65" height="30" rx="8" fill="#F1F3F4"/>
+        <text x="13" y="21" class="mono routePort">4000</text>
+        <path d="M91 15h18M102 8l8 7-8 7" stroke="#B8BEC4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="133" y="21" class="mono routeText">172.18.227.249:3000</text>
+      </g>
+      <g transform="translate(468 19)">
+        <circle cx="22" cy="22" r="20" fill="#FFE6E7"/>
+        <text x="16.5" y="29" class="display" font-size="18" font-weight="900" fill="#E3423F">i</text>
+      </g>
+      <g transform="translate(528 13)">
+        <rect width="96" height="44" rx="22" fill="#EEF3FF" stroke="#D4DFFF" stroke-width="2"/>
+        <path d="M31 11l-12 16h11l-5 12 14-18H28l3-10z" fill="#3D37E6"/>
+        <text x="45" y="28" class="display button" fill="#3D37E6">Auto</text>
+      </g>
+      <g transform="translate(650 13)">
+        <rect width="104" height="44" rx="22" fill="url(#connect)"/>
+        <text x="21" y="29" class="display button" fill="#FFFFFF">Connect</text>
+      </g>
+      <text x="790" y="40" class="display" font-size="24" font-weight="900" fill="#6A7076">...</text>
+    </g>
+
+    <!-- group 3333 -->
+    <g transform="translate(72 530)">
+      <rect x="0" y="0" width="22" height="22" rx="7" fill="#F3F5F6"/>
+      <path d="M6 7h10v8H6z" stroke="#9AA2AA" stroke-width="1.4"/>
+      <path d="M8 10l2 2-2 2M12 14h3" stroke="#9AA2AA" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="38" y="17" class="mono group">100.64.0.42:3333</text>
+      <g transform="translate(766 -5)">
+        <rect width="40" height="32" rx="16" fill="#F5F6F7"/>
+        <circle cx="18" cy="16" r="5" fill="#05BF54"/>
+        <text x="29" y="22" class="display groupCount">1</text>
+      </g>
+    </g>
+    <rect x="62" y="566" width="856" height="78" rx="24" fill="#FFFFFF" stroke="#E9ECEF"/>
+    <g transform="translate(82 571)">
+      <circle cx="16" cy="31" r="15" fill="#EAFBF0"/>
+      <circle cx="16" cy="31" r="7" fill="#05BF54"/>
+      <text x="56" y="30" class="display name">sp-8875-web3000</text>
+      <g transform="translate(56 43)">
+        <rect width="65" height="30" rx="8" fill="#F1F3F4"/>
+        <text x="13" y="21" class="mono routePort">8875</text>
+        <path d="M91 15h18M102 8l8 7-8 7" stroke="#B8BEC4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="133" y="21" class="mono routeText">3000</text>
+      </g>
+      <g transform="translate(528 13)">
+        <rect width="96" height="44" rx="22" fill="#EEF3FF" stroke="#D4DFFF" stroke-width="2"/>
+        <path d="M31 11l-12 16h11l-5 12 14-18H28l3-10z" fill="#3D37E6"/>
+        <text x="45" y="28" class="display button" fill="#3D37E6">Auto</text>
+      </g>
+      <g transform="translate(650 13)">
+        <rect width="104" height="44" rx="22" fill="#FFF9F8" stroke="#F1DCD8" stroke-width="1.4"/>
+        <text x="35" y="29" class="display button" fill="#4A4D51">Stop</text>
+      </g>
+      <text x="790" y="40" class="display" font-size="24" font-weight="900" fill="#6A7076">...</text>
+    </g>
+
+    <!-- group 2222 -->
+    <g transform="translate(72 670)">
+      <rect x="0" y="0" width="22" height="22" rx="7" fill="#F3F5F6"/>
+      <path d="M6 7h10v8H6z" stroke="#9AA2AA" stroke-width="1.4"/>
+      <path d="M8 10l2 2-2 2M12 14h3" stroke="#9AA2AA" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="38" y="17" class="mono group">100.64.0.42:2222</text>
+      <g transform="translate(766 -5)">
+        <rect width="40" height="32" rx="16" fill="#F5F6F7"/>
+        <circle cx="18" cy="16" r="5" fill="#FF8500"/>
+        <text x="29" y="22" class="display groupCount">1</text>
+      </g>
+    </g>
+    <rect x="62" y="706" width="856" height="78" rx="24" fill="#FFFFFF" stroke="#E9ECEF"/>
+    <g transform="translate(82 711)">
+      <circle cx="16" cy="31" r="15" fill="#FFF2E4"/>
+      <circle cx="16" cy="31" r="7" fill="#FF8500"/>
+      <text x="56" y="30" class="display name">sp-8877-web8888</text>
+      <g transform="translate(56 43)">
+        <rect width="65" height="30" rx="8" fill="#F1F3F4"/>
+        <text x="13" y="21" class="mono routePort">8877</text>
+        <path d="M91 15h18M102 8l8 7-8 7" stroke="#B8BEC4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="133" y="21" class="mono routeText">8888</text>
+      </g>
+      <g transform="translate(528 13)">
+        <rect width="96" height="44" rx="22" fill="#EEF3FF" stroke="#D4DFFF" stroke-width="2"/>
+        <path d="M31 11l-12 16h11l-5 12 14-18H28l3-10z" fill="#3D37E6"/>
+        <text x="45" y="28" class="display button" fill="#3D37E6">Auto</text>
+      </g>
+      <g transform="translate(650 13)">
+        <rect width="104" height="44" rx="22" fill="#FFF9F8" stroke="#F1DCD8" stroke-width="1.4"/>
+        <text x="35" y="29" class="display button" fill="#4A4D51">Stop</text>
+      </g>
+      <text x="790" y="40" class="display" font-size="24" font-weight="900" fill="#6A7076">...</text>
+    </g>
+
+    <!-- extra visible capacity -->
+    <g transform="translate(72 810)">
+      <rect x="0" y="0" width="22" height="22" rx="7" fill="#F3F5F6"/>
+      <path d="M6 7h10v8H6z" stroke="#9AA2AA" stroke-width="1.4"/>
+      <path d="M8 10l2 2-2 2M12 14h3" stroke="#9AA2AA" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="38" y="17" class="mono group">bastion.lab.local:22</text>
+      <g transform="translate(746 -5)">
+        <rect width="60" height="32" rx="16" fill="#F5F6F7"/>
+        <circle cx="22" cy="16" r="5" fill="#05BF54"/>
+        <circle cx="36" cy="16" r="5" fill="#05BF54"/>
+        <text x="47" y="22" class="display groupCount">2</text>
+      </g>
+    </g>
+    <rect x="62" y="846" width="856" height="140" rx="24" fill="#FFFFFF" stroke="#E9ECEF"/>
+    <line x1="134" y1="916" x2="918" y2="916" stroke="#ECEFF1"/>
+
+    <g transform="translate(82 861)">
+      <circle cx="16" cy="31" r="15" fill="#EAFBF0"/>
+      <circle cx="16" cy="31" r="7" fill="#05BF54"/>
+      <text x="56" y="30" class="display name">lab-notes</text>
+      <g transform="translate(56 43)">
+        <rect width="65" height="30" rx="8" fill="#F1F3F4"/>
+        <text x="13" y="21" class="mono routePort">8890</text>
+        <path d="M91 15h18M102 8l8 7-8 7" stroke="#B8BEC4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="133" y="21" class="mono routeText">8080</text>
+      </g>
+      <g transform="translate(528 13)">
+        <rect width="96" height="44" rx="22" fill="#EEF3FF" stroke="#D4DFFF" stroke-width="2"/>
+        <path d="M31 11l-12 16h11l-5 12 14-18H28l3-10z" fill="#3D37E6"/>
+        <text x="45" y="28" class="display button" fill="#3D37E6">Auto</text>
+      </g>
+      <g transform="translate(650 13)">
+        <rect width="104" height="44" rx="22" fill="#FFF9F8" stroke="#F1DCD8" stroke-width="1.4"/>
+        <text x="35" y="29" class="display button" fill="#4A4D51">Stop</text>
+      </g>
+      <text x="790" y="40" class="display" font-size="24" font-weight="900" fill="#6A7076">...</text>
+    </g>
+
+    <g transform="translate(82 931)">
+      <circle cx="16" cy="31" r="15" fill="#EAFBF0"/>
+      <circle cx="16" cy="31" r="7" fill="#05BF54"/>
+      <text x="56" y="30" class="display name">metrics</text>
+      <g transform="translate(56 43)">
+        <rect width="65" height="30" rx="8" fill="#F1F3F4"/>
+        <text x="13" y="21" class="mono routePort">8891</text>
+        <path d="M91 15h18M102 8l8 7-8 7" stroke="#B8BEC4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="133" y="21" class="mono routeText">9090</text>
+      </g>
+      <g transform="translate(528 13)">
+        <rect width="96" height="44" rx="22" fill="#EEF3FF" stroke="#D4DFFF" stroke-width="2"/>
+        <path d="M31 11l-12 16h11l-5 12 14-18H28l3-10z" fill="#3D37E6"/>
+        <text x="45" y="28" class="display button" fill="#3D37E6">Auto</text>
+      </g>
+      <g transform="translate(650 13)">
+        <rect width="104" height="44" rx="22" fill="#FFF9F8" stroke="#F1DCD8" stroke-width="1.4"/>
+        <text x="35" y="29" class="display button" fill="#4A4D51">Stop</text>
+      </g>
+      <text x="790" y="40" class="display" font-size="24" font-weight="900" fill="#6A7076">...</text>
+    </g>
+
+    <g transform="translate(72 1010)">
+      <rect x="0" y="0" width="22" height="22" rx="7" fill="#F3F5F6"/>
+      <path d="M6 7h10v8H6z" stroke="#9AA2AA" stroke-width="1.4"/>
+      <path d="M8 10l2 2-2 2M12 14h3" stroke="#9AA2AA" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="38" y="17" class="mono group">workstation.local:3333</text>
+      <g transform="translate(766 -5)">
+        <rect width="40" height="32" rx="16" fill="#F5F6F7"/>
+        <circle cx="18" cy="16" r="5" fill="#05BF54"/>
+        <text x="29" y="22" class="display groupCount">1</text>
+      </g>
+    </g>
+    <rect x="62" y="1046" width="856" height="78" rx="24" fill="#FFFFFF" stroke="#E9ECEF"/>
+    <g transform="translate(82 1051)">
+      <circle cx="16" cy="31" r="15" fill="#EAFBF0"/>
+      <circle cx="16" cy="31" r="7" fill="#05BF54"/>
+      <text x="56" y="30" class="display name">dev-dashboard</text>
+      <g transform="translate(56 43)">
+        <rect width="65" height="30" rx="8" fill="#F1F3F4"/>
+        <text x="13" y="21" class="mono routePort">8892</text>
+        <path d="M91 15h18M102 8l8 7-8 7" stroke="#B8BEC4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="133" y="21" class="mono routeText">3000</text>
+      </g>
+      <g transform="translate(528 13)">
+        <rect width="96" height="44" rx="22" fill="#EEF3FF" stroke="#D4DFFF" stroke-width="2"/>
+        <path d="M31 11l-12 16h11l-5 12 14-18H28l3-10z" fill="#3D37E6"/>
+        <text x="45" y="28" class="display button" fill="#3D37E6">Auto</text>
+      </g>
+      <g transform="translate(650 13)">
+        <rect width="104" height="44" rx="22" fill="#FFF9F8" stroke="#F1DCD8" stroke-width="1.4"/>
+        <text x="35" y="29" class="display button" fill="#4A4D51">Stop</text>
+      </g>
+      <text x="790" y="40" class="display" font-size="24" font-weight="900" fill="#6A7076">...</text>
+    </g>
+
+    <rect x="40" y="1132" width="900" height="88" rx="0" fill="#FBFCFC" opacity="0.96"/>
+    <line x1="40" y1="1132" x2="940" y2="1132" stroke="#E4E7EA"/>
+    <g transform="translate(62 1148)">
+      <rect width="192" height="40" rx="11" fill="#ECEEEF"/>
+      <path d="M25 12l15 8-15 8z" fill="#050607"/>
+      <text x="58" y="27" class="display footer">Start Enabled</text>
+    </g>
+    <g transform="translate(276 1148)">
+      <rect width="154" height="40" rx="11" fill="#ECEEEF"/>
+      <rect x="25" y="13" width="14" height="14" rx="3" fill="#050607"/>
+      <text x="58" y="27" class="display footer">Stop All</text>
+    </g>
+    <g transform="translate(724 1148)">
+      <rect width="194" height="40" rx="12" fill="#050607"/>
+      <path d="M34 11v18M25 20h18" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/>
+      <text x="64" y="27" class="display footer" style="fill:#FFFFFF">New Tunnel</text>
+    </g>
+    <g transform="translate(72 1194)">
+      <circle cx="13" cy="13" r="7" fill="none" stroke="#7B828A" stroke-width="2"/>
+      <path d="M13 1v5M13 20v5M1 13h5M20 13h5M4.5 4.5L8 8M18 18l3.5 3.5M21.5 4.5L18 8M8 18l-3.5 3.5" stroke="#7B828A" stroke-width="1.7" stroke-linecap="round"/>
+      <text x="30" y="18" class="display" font-size="15" font-weight="750" fill="#5A6067">Settings</text>
+      <path d="M101 9l5 5 5-5" stroke="#5A6067" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g transform="translate(852 1184)">
+      <rect width="66" height="32" rx="10" fill="#ECEEEF"/>
+      <text x="19" y="22" class="display" font-size="15" font-weight="750" fill="#050607">Quit</text>
+    </g>
+  </g>
+</svg>

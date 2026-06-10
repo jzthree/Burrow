@@ -1,253 +1,183 @@
-<svg width="1120" height="820" viewBox="0 0 1120 820" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="1000" height="720" viewBox="0 0 1000 720" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="page" x1="0" y1="0" x2="1120" y2="820" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F9FBF8"/>
-      <stop offset="0.55" stop-color="#F0F6F2"/>
-      <stop offset="1" stop-color="#E8F1EC"/>
-    </linearGradient>
-    <linearGradient id="connect" x1="0" y1="0" x2="96" y2="0" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#4B35D9"/>
-      <stop offset="1" stop-color="#177CFF"/>
-    </linearGradient>
-    <filter id="windowShadow" x="42" y="16" width="748" height="760" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
-      <feDropShadow dx="0" dy="22" stdDeviation="28" flood-color="#263D36" flood-opacity="0.18"/>
-      <feDropShadow dx="0" dy="2" stdDeviation="5" flood-color="#1A2622" flood-opacity="0.12"/>
-    </filter>
-    <filter id="editorShadow" x="642" y="134" width="414" height="560" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
-      <feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#253B35" flood-opacity="0.18"/>
-      <feDropShadow dx="0" dy="2" stdDeviation="5" flood-color="#1A2622" flood-opacity="0.10"/>
-    </filter>
-    <filter id="cardShadow" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="4" stdDeviation="7" flood-color="#263B36" flood-opacity="0.07"/>
-    </filter>
     <style>
-      .ui { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif; }
-      .mono { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; }
-      .title { font-size: 30px; font-weight: 780; letter-spacing: -0.9px; fill: #111312; }
-      .message { font-size: 15px; font-weight: 560; fill: #6E7772; }
-      .endpoint { font-size: 14px; font-weight: 720; fill: #7A827D; }
-      .endpointCount { font-size: 13px; font-weight: 760; fill: #9EA6A1; }
-      .name { font-size: 20px; font-weight: 780; letter-spacing: -0.28px; fill: #111413; }
-      .route { font-size: 17px; font-weight: 620; fill: #59625D; }
-      .chipText { font-size: 14px; font-weight: 760; }
-      .buttonText { font-size: 15px; font-weight: 760; }
-      .footerText { font-size: 15px; font-weight: 680; fill: #121514; }
-      .editorTitle { font-size: 20px; font-weight: 780; letter-spacing: -0.35px; fill: #111312; }
-      .editorCopy { font-size: 12px; font-weight: 540; fill: #74807A; }
-      .fieldLabel { font-size: 11px; font-weight: 720; fill: #7A827D; }
-      .fieldText { font-size: 13px; font-weight: 620; fill: #202724; }
+      .sans { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; }
+      .mono { font-family: "SF Mono", Menlo, monospace; }
     </style>
+    <filter id="panelShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="14" flood-color="#000000" flood-opacity="0.14"/>
+    </filter>
   </defs>
 
-  <rect width="1120" height="820" rx="40" fill="url(#page)"/>
+  <rect width="1000" height="720" fill="#ececf0"/>
 
-  <g class="ui" filter="url(#windowShadow)">
-    <rect x="72" y="54" width="650" height="682" rx="28" fill="#FBFCFB"/>
-    <rect x="72.5" y="54.5" width="649" height="681" rx="27.5" stroke="#DDE4E0"/>
-  </g>
+  <!-- ===================== menu panel ===================== -->
+  <rect x="40" y="30" width="450" height="660" rx="24" fill="#ffffff" stroke="#00000012" filter="url(#panelShadow)"/>
 
-  <g class="ui" transform="translate(104 92)">
-    <text x="0" y="0" class="title">Burrow</text>
-    <text x="0" y="38" class="message">3 up, 1 retrying, 1 needs a saved password.</text>
+  <!-- header -->
+  <text x="72" y="86" class="sans" font-size="22" font-weight="700" fill="#1d1d1f" letter-spacing="-0.4">Burrow</text>
+  <rect x="368" y="62" width="46" height="26" rx="13" fill="#e8f6ec"/>
+  <circle cx="383" cy="75" r="3.5" fill="#34a853"/>
+  <text x="393" y="79.5" class="sans" font-size="12.5" font-weight="700" fill="#1e7c3a">2</text>
+  <rect x="420" y="62" width="46" height="26" rx="13" fill="#fdecea"/>
+  <circle cx="435" cy="75" r="3.5" fill="#d93025"/>
+  <text x="445" y="79.5" class="sans" font-size="12.5" font-weight="700" fill="#c5221f">1</text>
+  <text x="72" y="113" class="sans" font-size="11" font-weight="600" fill="#8a8a8e">Gateway campus-vpn connected.</text>
+  <line x1="40" y1="128" x2="490" y2="128" stroke="#00000010"/>
 
-    <g transform="translate(430 -22)">
-      <rect width="56" height="30" rx="15" fill="#E9F9F0" stroke="#CBEEDB"/>
-      <circle cx="17" cy="15" r="5" fill="#08BF63"/>
-      <text x="30" y="20" font-size="15" font-weight="760" fill="#2FA96A">3</text>
-    </g>
-    <g transform="translate(496 -22)">
-      <rect width="56" height="30" rx="15" fill="#FFF4E4" stroke="#F9DFB5"/>
-      <circle cx="17" cy="15" r="5" fill="#FF8700"/>
-      <text x="30" y="20" font-size="15" font-weight="760" fill="#E79025">1</text>
-    </g>
-    <g transform="translate(562 -22)">
-      <rect width="56" height="30" rx="15" fill="#FFF1F2" stroke="#F7D5D9"/>
-      <circle cx="17" cy="15" r="5" fill="#FF143A"/>
-      <text x="30" y="20" font-size="15" font-weight="760" fill="#DB4A57">1</text>
-    </g>
+  <!-- vpn gateways section -->
+  <rect x="72" y="142" width="18" height="18" rx="5" fill="#f0f0f2"/>
+  <path d="M81 146 L85.5 148 V151 C85.5 153.6 83.4 155.4 81 156.2 C78.6 155.4 76.5 153.6 76.5 151 V148 Z" fill="none" stroke="#98989d" stroke-width="1.2"/>
+  <text x="98" y="155" class="mono" font-size="10.5" font-weight="700" fill="#98989d" letter-spacing="0.2">vpn gateways</text>
+  <rect x="448" y="142" width="18" height="18" rx="5" fill="#f0f0f2"/>
+  <text x="453.5" y="155" class="sans" font-size="11" font-weight="700" fill="#98989d">+</text>
 
-    <line x1="0" y1="68" x2="586" y2="68" stroke="#E2E7E4" stroke-width="1.4"/>
+  <rect x="64" y="168" width="402" height="58" rx="16" fill="#fbfbfc" stroke="#00000008"/>
+  <circle cx="88" cy="197" r="8" fill="#34a853" opacity="0.12"/>
+  <circle cx="88" cy="197" r="4" fill="#34a853"/>
+  <text x="106" y="195" class="sans" font-size="13" font-weight="700" fill="#1d1d1f">campus-vpn</text>
+  <text x="106" y="213" class="mono" font-size="10.5" font-weight="600" fill="#8a8a8e">vpn.university.edu · socks :11080</text>
+  <rect x="384" y="183" width="56" height="28" rx="14" fill="#ffffff" stroke="#00000018"/>
+  <text x="398" y="201" class="sans" font-size="12" font-weight="600" fill="#48484c">Stop</text>
+  <circle cx="450" cy="197" r="1.7" fill="#b6b6ba"/><circle cx="456" cy="197" r="1.7" fill="#b6b6ba"/><circle cx="462" cy="197" r="1.7" fill="#b6b6ba"/>
 
-    <g transform="translate(0 112)">
-      <rect x="0" y="-12" width="17" height="14" rx="3.5" fill="#F5F7F6" stroke="#D5DCD8"/>
-      <path d="M5 0L9 -4L5 -8" stroke="#8D9691" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="28" y="0" class="mono endpoint">100.64.0.42:3333</text>
-      <circle cx="536" cy="-6" r="5" fill="#08BF63"/>
-      <text x="552" y="0" class="endpointCount">1</text>
+  <!-- group: hpc.university.edu (via campus-vpn) -->
+  <rect x="72" y="240" width="18" height="18" rx="5" fill="#f0f0f2"/>
+  <text x="77" y="253" class="mono" font-size="9" font-weight="700" fill="#98989d">&gt;_</text>
+  <text x="98" y="253" class="mono" font-size="10.5" font-weight="700" fill="#98989d" letter-spacing="0.2">hpc.university.edu</text>
+  <rect x="238" y="241" width="110" height="18" rx="9" fill="#eef0ff"/>
+  <path d="M247 244.5 L251 246 V248.6 C251 250.8 249.2 252.3 247 253 C244.8 252.3 243 250.8 243 248.6 V246 Z" fill="none" stroke="#5050d6" stroke-width="1.1"/>
+  <text x="255" y="253" class="mono" font-size="9.5" font-weight="700" fill="#5050d6">campus-vpn</text>
+  <path d="M336 248 L339 251 L342 248" fill="none" stroke="#5050d6" stroke-width="1.3" stroke-linecap="round"/>
+  <rect x="424" y="240" width="42" height="20" rx="10" fill="#f0f0f2"/>
+  <circle cx="436" cy="250" r="2.6" fill="#34a853"/>
+  <text x="444" y="254" class="sans" font-size="10.5" font-weight="700" fill="#7a7a7e">2</text>
 
-      <g filter="url(#cardShadow)">
-        <rect x="0" y="20" width="586" height="86" rx="18" fill="#FFFFFF"/>
-        <rect x="0.5" y="20.5" width="585" height="85" rx="17.5" stroke="#ECF0EE"/>
-      </g>
-      <circle cx="25" cy="63" r="8" fill="#08BF63"/>
-      <text x="50" y="55" class="name">sp-8875-web3000</text>
-      <text x="50" y="82" class="mono route">8875</text>
-      <path d="M102 76H126M126 76L119 69M126 76L119 83" stroke="#9AA39E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="142" y="82" class="mono route">3000</text>
-      <g transform="translate(318 44)">
-        <rect width="76" height="34" rx="17" fill="#EEF5FF" stroke="#D3E4FF" stroke-width="1.4"/>
-        <path d="M22 8L15 21H22L19 29L29 15H21L22 8Z" fill="#087DFF"/>
-        <text x="36" y="22" class="chipText" fill="#087DFF">Auto</text>
-      </g>
-      <g transform="translate(410 43)">
-        <rect width="78" height="36" rx="18" fill="#FBFCFB" stroke="#DDE4E0" stroke-width="1.3"/>
-        <text x="25" y="24" class="buttonText" fill="#B14444">Stop</text>
-      </g>
-      <text x="532" y="72" font-size="24" font-weight="800" fill="#69716D">...</text>
-    </g>
+  <rect x="64" y="266" width="402" height="117" rx="16" fill="#fbfbfc" stroke="#00000008"/>
 
-    <g transform="translate(0 250)">
-      <rect x="0" y="-12" width="17" height="14" rx="3.5" fill="#F5F7F6" stroke="#D5DCD8"/>
-      <path d="M5 0L9 -4L5 -8" stroke="#8D9691" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="28" y="0" class="mono endpoint">100.64.0.42:4444</text>
-      <circle cx="518" cy="-6" r="5" fill="#08BF63"/>
-      <circle cx="536" cy="-6" r="5" fill="#08BF63"/>
-      <text x="552" y="0" class="endpointCount">2</text>
+  <!-- row: jupyter -->
+  <circle cx="88" cy="295" r="8" fill="#34a853" opacity="0.12"/>
+  <circle cx="88" cy="295" r="4" fill="#34a853"/>
+  <text x="106" y="293" class="sans" font-size="13" font-weight="700" fill="#1d1d1f">jupyter</text>
+  <rect x="106" y="299" width="40" height="17" rx="4" fill="#f0f0f2"/>
+  <text x="113" y="311" class="mono" font-size="10.5" font-weight="700" fill="#5a5a5e">8888</text>
+  <text x="152" y="311" class="mono" font-size="10.5" fill="#b0b0b5">›</text>
+  <text x="162" y="311" class="mono" font-size="10.5" font-weight="600" fill="#7a7a7e">8888</text>
+  <text x="196" y="311" class="mono" font-size="10" fill="#c2c2c6">· via campus-vpn</text>
+  <g transform="translate(362,288)"><path d="M6 0 L0 7.5 L4.2 7.5 L3 13 L10 5.5 L5.6 5.5 Z" fill="#5050d6"/></g>
+  <rect x="384" y="281" width="56" height="28" rx="14" fill="#ffffff" stroke="#00000018"/>
+  <text x="398" y="299" class="sans" font-size="12" font-weight="600" fill="#48484c">Stop</text>
+  <circle cx="450" cy="295" r="1.7" fill="#b6b6ba"/><circle cx="456" cy="295" r="1.7" fill="#b6b6ba"/><circle cx="462" cy="295" r="1.7" fill="#b6b6ba"/>
+  <line x1="106" y1="324" x2="466" y2="324" stroke="#00000008"/>
 
-      <g filter="url(#cardShadow)">
-        <rect x="0" y="20" width="586" height="146" rx="18" fill="#FFFFFF"/>
-        <rect x="0.5" y="20.5" width="585" height="145" rx="17.5" stroke="#ECF0EE"/>
-      </g>
+  <!-- row: rstudio (stopped) -->
+  <circle cx="88" cy="353" r="8" fill="#9a9aa0" opacity="0.14"/>
+  <circle cx="88" cy="353" r="4" fill="#9a9aa0"/>
+  <text x="106" y="351" class="sans" font-size="13" font-weight="700" fill="#1d1d1f">rstudio</text>
+  <rect x="106" y="357" width="40" height="17" rx="4" fill="#f0f0f2"/>
+  <text x="113" y="369" class="mono" font-size="10.5" font-weight="700" fill="#5a5a5e">8787</text>
+  <text x="152" y="369" class="mono" font-size="10.5" fill="#b0b0b5">›</text>
+  <text x="162" y="369" class="mono" font-size="10.5" font-weight="600" fill="#7a7a7e">8787</text>
+  <text x="196" y="369" class="mono" font-size="10" fill="#c2c2c6">· via campus-vpn</text>
+  <g transform="translate(362,346)"><path d="M6 0 L0 7.5 L4.2 7.5 L3 13 L10 5.5 L5.6 5.5 Z" fill="#cfcfd4"/></g>
+  <rect x="372" y="339" width="68" height="28" rx="14" fill="#3b3bd0"/>
+  <text x="386" y="357" class="sans" font-size="12" font-weight="700" fill="#ffffff">Connect</text>
+  <circle cx="450" cy="353" r="1.7" fill="#b6b6ba"/><circle cx="456" cy="353" r="1.7" fill="#b6b6ba"/><circle cx="462" cy="353" r="1.7" fill="#b6b6ba"/>
 
-      <circle cx="25" cy="63" r="8" fill="#08BF63"/>
-      <text x="50" y="55" class="name">workstation:3000</text>
-      <text x="50" y="82" class="mono route">8866</text>
-      <path d="M102 76H126M126 76L119 69M126 76L119 83" stroke="#9AA39E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="142" y="82" class="mono route">3000</text>
-      <g transform="translate(318 44)">
-        <rect width="76" height="34" rx="17" fill="#EEF5FF" stroke="#D3E4FF" stroke-width="1.4"/>
-        <path d="M22 8L15 21H22L19 29L29 15H21L22 8Z" fill="#087DFF"/>
-        <text x="36" y="22" class="chipText" fill="#087DFF">Auto</text>
-      </g>
-      <g transform="translate(410 43)">
-        <rect width="78" height="36" rx="18" fill="#FBFCFB" stroke="#DDE4E0" stroke-width="1.3"/>
-        <text x="25" y="24" class="buttonText" fill="#B14444">Stop</text>
-      </g>
-      <text x="532" y="72" font-size="24" font-weight="800" fill="#69716D">...</text>
+  <!-- group: bastion.example.com (direct) -->
+  <rect x="72" y="400" width="18" height="18" rx="5" fill="#f0f0f2"/>
+  <text x="77" y="413" class="mono" font-size="9" font-weight="700" fill="#98989d">&gt;_</text>
+  <text x="98" y="413" class="mono" font-size="10.5" font-weight="700" fill="#98989d" letter-spacing="0.2">bastion.example.com</text>
+  <rect x="253" y="401" width="60" height="18" rx="9" fill="#f0f0f2"/>
+  <text x="263" y="413" class="mono" font-size="9.5" font-weight="700" fill="#98989d">direct</text>
+  <path d="M301 408 L304 411 L307 408" fill="none" stroke="#98989d" stroke-width="1.3" stroke-linecap="round"/>
+  <rect x="418" y="400" width="48" height="20" rx="10" fill="#f0f0f2"/>
+  <circle cx="430" cy="410" r="2.6" fill="#34a853"/>
+  <circle cx="438" cy="410" r="2.6" fill="#d93025"/>
+  <text x="446" y="414" class="sans" font-size="10.5" font-weight="700" fill="#7a7a7e">2</text>
 
-      <line x1="50" y1="100" x2="586" y2="100" stroke="#E9EEEB" stroke-width="1.2"/>
-      <circle cx="25" cy="124" r="8" fill="#08BF63"/>
-      <text x="50" y="116" class="name">sp-8876-web8888</text>
-      <text x="50" y="143" class="mono route">8876</text>
-      <path d="M102 137H126M126 137L119 130M126 137L119 144" stroke="#9AA39E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="142" y="143" class="mono route">8888</text>
-      <g transform="translate(318 105)">
-        <rect width="76" height="34" rx="17" fill="#EEF5FF" stroke="#D3E4FF" stroke-width="1.4"/>
-        <path d="M22 8L15 21H22L19 29L29 15H21L22 8Z" fill="#087DFF"/>
-        <text x="36" y="22" class="chipText" fill="#087DFF">Auto</text>
-      </g>
-      <g transform="translate(410 104)">
-        <rect width="78" height="36" rx="18" fill="#FBFCFB" stroke="#DDE4E0" stroke-width="1.3"/>
-        <text x="25" y="24" class="buttonText" fill="#B14444">Stop</text>
-      </g>
-      <text x="532" y="133" font-size="24" font-weight="800" fill="#69716D">...</text>
-    </g>
+  <rect x="64" y="426" width="402" height="117" rx="16" fill="#fbfbfc" stroke="#00000008"/>
 
-    <g transform="translate(0 468)">
-      <rect x="0" y="-12" width="17" height="14" rx="3.5" fill="#F5F7F6" stroke="#D5DCD8"/>
-      <path d="M5 0L9 -4L5 -8" stroke="#8D9691" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="28" y="0" class="mono endpoint">100.64.0.42:2222</text>
-      <circle cx="536" cy="-6" r="5" fill="#FF8700"/>
-      <text x="552" y="0" class="endpointCount">1</text>
+  <!-- row: prod-db -->
+  <circle cx="88" cy="455" r="8" fill="#34a853" opacity="0.12"/>
+  <circle cx="88" cy="455" r="4" fill="#34a853"/>
+  <text x="106" y="453" class="sans" font-size="13" font-weight="700" fill="#1d1d1f">prod-db</text>
+  <rect x="106" y="459" width="46" height="17" rx="4" fill="#f0f0f2"/>
+  <text x="112" y="471" class="mono" font-size="10.5" font-weight="700" fill="#5a5a5e">15432</text>
+  <text x="158" y="471" class="mono" font-size="10.5" fill="#b0b0b5">›</text>
+  <text x="168" y="471" class="mono" font-size="10.5" font-weight="600" fill="#7a7a7e">5432</text>
+  <g transform="translate(362,448)"><path d="M6 0 L0 7.5 L4.2 7.5 L3 13 L10 5.5 L5.6 5.5 Z" fill="#5050d6"/></g>
+  <rect x="384" y="441" width="56" height="28" rx="14" fill="#ffffff" stroke="#00000018"/>
+  <text x="398" y="459" class="sans" font-size="12" font-weight="600" fill="#48484c">Stop</text>
+  <circle cx="450" cy="455" r="1.7" fill="#b6b6ba"/><circle cx="456" cy="455" r="1.7" fill="#b6b6ba"/><circle cx="462" cy="455" r="1.7" fill="#b6b6ba"/>
+  <line x1="106" y1="484" x2="466" y2="484" stroke="#00000008"/>
 
-      <g filter="url(#cardShadow)">
-        <rect x="0" y="20" width="586" height="86" rx="18" fill="#FFFFFF"/>
-        <rect x="0.5" y="20.5" width="585" height="85" rx="17.5" stroke="#ECF0EE"/>
-      </g>
-      <circle cx="25" cy="63" r="8" fill="#FF8700"/>
-      <text x="50" y="55" class="name">sp-8877-web8888</text>
-      <text x="50" y="82" class="mono route">8877</text>
-      <path d="M102 76H126M126 76L119 69M126 76L119 83" stroke="#9AA39E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="142" y="82" class="mono route">8888</text>
-      <circle cx="288" cy="63" r="17" fill="#FFF3E7"/>
-      <circle cx="288" cy="63" r="9" fill="#FF8700"/>
-      <text x="285" y="68" font-size="13" font-weight="800" fill="#FFFFFF">i</text>
-      <g transform="translate(318 44)">
-        <rect width="76" height="34" rx="17" fill="#EEF5FF" stroke="#D3E4FF" stroke-width="1.4"/>
-        <path d="M22 8L15 21H22L19 29L29 15H21L22 8Z" fill="#087DFF"/>
-        <text x="36" y="22" class="chipText" fill="#087DFF">Auto</text>
-      </g>
-      <g transform="translate(410 43)">
-        <rect width="88" height="36" rx="18" fill="url(#connect)"/>
-        <text x="19" y="24" class="buttonText" fill="#FFFFFF">Connect</text>
-      </g>
-      <text x="532" y="72" font-size="24" font-weight="800" fill="#69716D">...</text>
-    </g>
+  <!-- row: staging-api (retrying) -->
+  <circle cx="88" cy="513" r="8" fill="#d93025" opacity="0.12"/>
+  <circle cx="88" cy="513" r="4" fill="#d93025"/>
+  <text x="106" y="511" class="sans" font-size="13" font-weight="700" fill="#1d1d1f">staging-api</text>
+  <text x="106" y="529" class="mono" font-size="10.5" font-weight="600" fill="#c5221f">network issue · retry 3 in 4s</text>
+  <g transform="translate(362,506)"><path d="M6 0 L0 7.5 L4.2 7.5 L3 13 L10 5.5 L5.6 5.5 Z" fill="#5050d6"/></g>
+  <rect x="384" y="499" width="56" height="28" rx="14" fill="#ffffff" stroke="#00000018"/>
+  <text x="398" y="517" class="sans" font-size="12" font-weight="600" fill="#48484c">Stop</text>
+  <circle cx="450" cy="513" r="1.7" fill="#b6b6ba"/><circle cx="456" cy="513" r="1.7" fill="#b6b6ba"/><circle cx="462" cy="513" r="1.7" fill="#b6b6ba"/>
 
-    <line x1="0" y1="610" x2="586" y2="610" stroke="#E2E7E4" stroke-width="1.4"/>
-    <g transform="translate(0 638)">
-      <rect width="136" height="36" rx="10" fill="#EEF0EF"/>
-      <path d="M22 10L34 18L22 26V10Z" fill="#111312"/>
-      <text x="48" y="24" class="footerText">Start Enabled</text>
-      <rect x="154" width="96" height="36" rx="10" fill="#EEF0EF"/>
-      <rect x="174" y="13" width="10" height="10" rx="2" fill="#111312"/>
-      <text x="196" y="24" class="footerText">Stop All</text>
-      <rect x="438" width="148" height="36" rx="10" fill="#050706"/>
-      <path d="M466 10V26M458 18H474" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
-      <text x="492" y="24" class="footerText" fill="#FFFFFF">New Tunnel</text>
-    </g>
-  </g>
+  <!-- footer -->
+  <path d="M40 556 H490 V666 Q490 690 466 690 H64 Q40 690 40 666 Z" fill="#f7f7f9"/>
+  <line x1="40" y1="556" x2="490" y2="556" stroke="#00000010"/>
 
-  <g class="ui" filter="url(#editorShadow)">
-    <rect x="676" y="162" width="344" height="496" rx="24" fill="#FBFCFB"/>
-    <rect x="676.5" y="162.5" width="343" height="495" rx="23.5" stroke="#DDE4E0"/>
-  </g>
+  <g transform="translate(76,572)"><path d="M0 0 L9 5.5 L0 11 Z" fill="#48484c"/></g>
+  <text x="92" y="582" class="sans" font-size="12" font-weight="600" fill="#48484c">Start Enabled</text>
+  <rect x="186" y="572" width="10" height="10" rx="2" fill="#48484c"/>
+  <text x="202" y="582" class="sans" font-size="12" font-weight="600" fill="#48484c">Stop All</text>
 
-  <g class="ui" transform="translate(706 199)">
-    <text x="0" y="0" class="editorTitle">New Tunnel</text>
-    <text x="0" y="25" class="editorCopy">Common settings first. Advanced SSH knobs stay tucked away.</text>
-    <text x="248" y="4" font-size="12" font-weight="720" fill="#6D7470">Auto</text>
-    <rect x="284" y="-14" width="44" height="24" rx="12" fill="#0A7CFF"/>
-    <circle cx="316" cy="-2" r="10" fill="#FFFFFF"/>
+  <rect x="267" y="565" width="88" height="30" rx="15" fill="#ffffff" stroke="#00000020"/>
+  <path d="M280 572.5 L284.5 574.3 V577.4 C284.5 580 282.4 581.8 280 582.6 C277.6 581.8 275.5 580 275.5 577.4 V574.3 Z" fill="none" stroke="#48484c" stroke-width="1.2"/>
+  <text x="290" y="584.5" class="sans" font-size="12" font-weight="600" fill="#48484c">New VPN</text>
 
-    <g transform="translate(0 62)">
-      <rect width="284" height="132" rx="14" fill="#FFFFFF" stroke="#ECF0EE"/>
-      <text x="14" y="24" font-size="14" font-weight="780" fill="#111312">Endpoint</text>
-      <text x="14" y="43" class="editorCopy">Pick a known SSH host or type a new one.</text>
+  <rect x="363" y="565" width="103" height="30" rx="15" fill="#141416"/>
+  <text x="376" y="584.5" class="sans" font-size="12.5" font-weight="700" fill="#ffffff">+ New Tunnel</text>
 
-      <text x="20" y="75" class="fieldLabel">Host</text>
-      <rect x="72" y="58" width="196" height="26" rx="7" fill="#F7F9F8" stroke="#DDE4E0"/>
-      <text x="84" y="76" class="mono fieldText">100.64.0.42</text>
+  <circle cx="81" cy="628" r="7" fill="none" stroke="#8a8a8e" stroke-width="1.5"/>
+  <circle cx="81" cy="628" r="2.5" fill="#8a8a8e"/>
+  <text x="95" y="632" class="sans" font-size="11.5" font-weight="600" fill="#6a6a6e">Settings ▾</text>
+  <text x="160" y="632" class="sans" font-size="10" fill="#b6b6ba">· Import from SSH Config · Start at Login · Quit</text>
 
-      <text x="20" y="111" class="fieldLabel">SSH Port</text>
-      <rect x="72" y="94" width="62" height="26" rx="7" fill="#F7F9F8" stroke="#DDE4E0"/>
-      <text x="86" y="112" class="mono fieldText">4444</text>
-      <rect x="146" y="94" width="90" height="26" rx="8" fill="#EEF5FF" stroke="#D3E4FF"/>
-      <path d="M160 101L154 113H161L158 120L168 107H160L160 101Z" fill="#087DFF"/>
-      <text x="174" y="112" font-size="12" font-weight="760" fill="#087DFF">Autofill</text>
-    </g>
+  <!-- ===================== feature column ===================== -->
+  <text x="540" y="78" class="sans" font-size="20" font-weight="700" fill="#1d1d1f" letter-spacing="-0.3">SSH tunnels + userspace VPNs,</text>
+  <text x="540" y="103" class="sans" font-size="20" font-weight="700" fill="#1d1d1f" letter-spacing="-0.3">supervised together.</text>
 
-    <g transform="translate(0 212)">
-      <rect width="284" height="132" rx="14" fill="#FFFFFF" stroke="#ECF0EE"/>
-      <text x="14" y="24" font-size="14" font-weight="780" fill="#111312">Forward</text>
-      <text x="14" y="43" class="editorCopy">The usual case is local port -&gt; destination service.</text>
+  <circle cx="547" cy="146" r="3.5" fill="#5050d6"/>
+  <text x="562" y="151" class="sans" font-size="13" font-weight="700" fill="#1d1d1f">VPN gateways without a tun device</text>
+  <text x="562" y="169" class="sans" font-size="11.5" fill="#5a5a5e">openconnect + ocproxy expose GlobalProtect or AnyConnect as a</text>
+  <text x="562" y="184" class="sans" font-size="11.5" fill="#5a5a5e">local SOCKS port — no root, no routes, runs beside Tailscale.</text>
 
-      <text x="20" y="77" class="fieldLabel">Local Port</text>
-      <rect x="88" y="60" width="70" height="26" rx="7" fill="#F7F9F8" stroke="#DDE4E0"/>
-      <text x="102" y="78" class="mono fieldText">8878</text>
+  <circle cx="547" cy="216" r="3.5" fill="#5050d6"/>
+  <text x="562" y="221" class="sans" font-size="13" font-weight="700" fill="#1d1d1f">Browser-based SAML sign-in</text>
+  <text x="562" y="239" class="sans" font-size="11.5" fill="#5a5a5e">GlobalProtect logins open in an embedded window; AnyConnect</text>
+  <text x="562" y="254" class="sans" font-size="11.5" fill="#5a5a5e">uses your default browser. Certificate pinning is one click.</text>
 
-      <text x="20" y="113" class="fieldLabel">To</text>
-      <rect x="88" y="96" width="114" height="26" rx="7" fill="#F7F9F8" stroke="#DDE4E0"/>
-      <text x="100" y="114" class="mono fieldText">localhost</text>
-      <text x="208" y="114" class="mono fieldText">:</text>
-      <rect x="218" y="96" width="50" height="26" rx="7" fill="#F7F9F8" stroke="#DDE4E0"/>
-      <text x="229" y="114" class="mono fieldText">3000</text>
-    </g>
+  <circle cx="547" cy="286" r="3.5" fill="#5050d6"/>
+  <text x="562" y="291" class="sans" font-size="13" font-weight="700" fill="#1d1d1f">Pick a VPN per host</text>
+  <text x="562" y="309" class="sans" font-size="11.5" fill="#5a5a5e">The dropdown on each host group routes its tunnels via a</text>
+  <text x="562" y="324" class="sans" font-size="11.5" fill="#5a5a5e">gateway or directly; running tunnels restart onto the new path.</text>
 
-    <g transform="translate(0 362)">
-      <rect width="284" height="44" rx="12" fill="#F4F7F5" stroke="#E4EAE7"/>
-      <path d="M20 17H34M20 22H29M20 27H34" stroke="#7A827D" stroke-width="1.8" stroke-linecap="round"/>
-      <text x="48" y="27" font-size="13" font-weight="720" fill="#2A312E">Advanced SSH settings</text>
-      <text x="250" y="27" font-size="18" font-weight="700" fill="#8C9590">⌄</text>
-    </g>
+  <circle cx="547" cy="356" r="3.5" fill="#34a853"/>
+  <text x="562" y="361" class="sans" font-size="13" font-weight="700" fill="#1d1d1f">Honest status, live retries</text>
+  <text x="562" y="379" class="sans" font-size="11.5" fill="#5a5a5e">Green only after the ssh process owns the local listener. Failed</text>
+  <text x="562" y="394" class="sans" font-size="11.5" fill="#5a5a5e">rows show a diagnosis with a live countdown to the next retry.</text>
 
-    <g transform="translate(0 438)">
-      <rect width="74" height="32" rx="9" fill="#EEF0EF"/>
-      <text x="19" y="21" font-size="14" font-weight="680" fill="#111312">Cancel</text>
-      <rect x="210" width="74" height="32" rx="9" fill="#0A7CFF"/>
-      <text x="233" y="21" font-size="14" font-weight="760" fill="#FFFFFF">Save</text>
-    </g>
-  </g>
+  <circle cx="547" cy="426" r="3.5" fill="#34a853"/>
+  <text x="562" y="431" class="sans" font-size="13" font-weight="700" fill="#1d1d1f">One-click everything</text>
+  <text x="562" y="449" class="sans" font-size="11.5" fill="#5a5a5e">Click a port chip to copy localhost:8888. Open Chrome or Edge</text>
+  <text x="562" y="464" class="sans" font-size="11.5" fill="#5a5a5e">proxied through a VPN. Plain ssh routes via the generated include file.</text>
 
-  <text x="338" y="788" class="mono" font-size="14" font-weight="720" letter-spacing="4" fill="#B1BDB7">BURROW • SSH TUNNELS THAT REMEMBER HOW TO COME BACK</text>
+  <circle cx="547" cy="496" r="3.5" fill="#34a853"/>
+  <text x="562" y="501" class="sans" font-size="13" font-weight="700" fill="#1d1d1f">Config that stays yours</text>
+  <text x="562" y="519" class="sans" font-size="11.5" fill="#5a5a5e">One JSON file, watched live — CLI edits appear instantly. Import</text>
+  <text x="562" y="534" class="sans" font-size="11.5" fill="#5a5a5e">hosts from ~/.ssh/config; autodetect VPNs from official clients.</text>
+
+  <rect x="540" y="566" width="420" height="2" rx="1" fill="#00000010"/>
+  <text x="540" y="596" class="mono" font-size="11.5" fill="#5a5a5e">brew install openconnect ocproxy   # for VPN gateways</text>
+  <text x="540" y="616" class="mono" font-size="11.5" fill="#5a5a5e">./scripts/install-app.sh &amp;&amp; open ~/Applications/Burrow.app</text>
 </svg>
