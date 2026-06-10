@@ -77,6 +77,29 @@ public enum GatewayCommandBuilder {
         locateExecutable(named: "ocproxy", environmentOverride: ProcessInfo.processInfo.environment["BURROW_OCPROXY"])
     }
 
+    /// openconnect's bundled HIP-report helper. GlobalProtect gateways that
+    /// enforce endpoint compliance accept the tunnel but silently drop all
+    /// traffic unless the client submits a HIP report, so for gp gateways we
+    /// attach the helper whenever it exists; servers that don't request HIP
+    /// simply never invoke it.
+    public static func hipReportPath() -> String? {
+        if let override = ProcessInfo.processInfo.environment["BURROW_HIPREPORT"],
+           FileManager.default.isExecutableFile(atPath: override) {
+            return override
+        }
+        guard let openconnect = openconnectPath() else {
+            return nil
+        }
+        let prefix = (openconnect as NSString).deletingLastPathComponent  // .../bin
+        let homebrewPrefix = (prefix as NSString).deletingLastPathComponent
+        let candidates = [
+            "\(homebrewPrefix)/opt/openconnect/libexec/openconnect/hipreport.sh",
+            "\(homebrewPrefix)/libexec/openconnect/hipreport.sh",
+            "/usr/local/libexec/openconnect/hipreport.sh",
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
     /// Arguments for openconnect running the VPN entirely in userspace:
     /// `--script-tun` hands the tunnel to ocproxy, which exposes it as a
     /// local SOCKS5 listener. No tun device, no root, no routes.
@@ -103,6 +126,12 @@ public enum GatewayCommandBuilder {
             args.append("--passwd-on-stdin")
         case .samlExternalBrowser:
             args.append("--external-browser=/usr/bin/open")
+        }
+
+        if gateway.vpnProtocol.lowercased() == "gp",
+           !gateway.extraArgs.contains(where: { $0.hasPrefix("--csd-wrapper") }),
+           let hipReport = hipReportPath() {
+            args.append("--csd-wrapper=\(hipReport)")
         }
 
         args.append(contentsOf: gateway.extraArgs)
