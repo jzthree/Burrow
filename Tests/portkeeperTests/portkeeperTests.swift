@@ -602,3 +602,20 @@ private func waitUntil(timeout: TimeInterval, condition: @escaping @Sendable () 
     let reachable = SOCKSProbe.canReach(proxyPort: 9, targetHost: "example.com", targetPort: 22, timeout: 2)
     #expect(reachable == false)
 }
+
+@Test func launchPreparerPreservesGateway() async throws {
+    let tunnel = TunnelConfig(
+        name: "via-vpn",
+        host: "internal.example.edu",
+        user: "alice",
+        forwards: [ForwardSpec(kind: .local, listenPort: 4000, destinationHost: "10.0.0.1", destinationPort: 3000)],
+        gateway: "campus"
+    )
+    let prepared = try TunnelLaunchPreparer.prepare(tunnel)
+    #expect(prepared.gateway == "campus")
+
+    // And the gateway proxy must inject after preparation (the real launch path).
+    let gw = GatewayConfig(name: "campus", vpnProtocol: "gp", server: "vpn.example.edu", socksPort: 11080)
+    let routed = GatewayLinker.applyingGatewayProxy(to: prepared, gateways: [gw])
+    #expect(routed.extraSSHOptions.contains { $0.contains("ProxyCommand=") && $0.contains("11080") })
+}

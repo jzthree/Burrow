@@ -1009,7 +1009,6 @@ final class MenuBarViewModel: ObservableObject {
         updateState(for: prepared.name, isRunning: false, state: .connecting, message: "Waiting for gateway \(gatewayName)")
         Task { @MainActor [weak self] in
             guard let self else { return }
-
             // Adopt a working proxy if one is already there — e.g. a VPN left
             // running by a previous Burrow session. If it can reach the target,
             // use it directly instead of forcing a fresh (SAML) reconnect.

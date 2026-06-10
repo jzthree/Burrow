@@ -60,7 +60,8 @@ public enum TunnelLaunchPreparer {
             serverAliveCountMax: tunnel.serverAliveCountMax,
             reconnectDelaySeconds: tunnel.reconnectDelaySeconds,
             enabled: tunnel.enabled,
-            extraSSHOptions: updatedOptions
+            extraSSHOptions: updatedOptions,
+            gateway: tunnel.gateway
         )
     }
 }
