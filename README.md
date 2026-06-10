@@ -26,6 +26,20 @@ It keeps tunnel definitions in one config file, runs them with the system `ssh`,
 - Passwords (SSH and VPN) live in the macOS Keychain, saved only after a successful connection.
 - No custom SSH or VPN stack: Burrow builds commands and supervises `/usr/bin/ssh` and `openconnect`.
 
+## Requirements
+
+- macOS 13 or later.
+- **Tunnels need nothing extra.** Burrow supervises the system `/usr/bin/ssh`; there are no runtime dependencies for the core app.
+- **VPN gateways are optional** and need two open-source tools:
+  - [`openconnect`](https://www.infradead.org/openconnect/) (LGPL-2.1) — speaks the AnyConnect, GlobalProtect, Pulse, and Fortinet protocols.
+  - [`ocproxy`](https://github.com/cernekee/ocproxy) — turns the VPN session into a local SOCKS5 listener, so no tun device or root is needed.
+
+  ```bash
+  brew install openconnect ocproxy
+  ```
+
+  Burrow looks for them in `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`, and `/usr/bin`, or at paths set via the `BURROW_OPENCONNECT` / `BURROW_OCPROXY` environment variables. If they are missing, gateways simply fail to start with a message telling you the install command — tunnels are unaffected.
+
 ## Quick Start
 
 Build everything:
