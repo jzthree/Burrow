@@ -19,6 +19,14 @@ public enum TunnelLaunchPreparer {
         var sawStrictChecking = false
 
         for option in tunnel.extraSSHOptions {
+            // Drop options that make ssh exit right after connecting, which
+            // breaks a persistent forward (the supervisor sees a clean exit and
+            // reconnects forever). These come from legacy PortKeeper
+            // "connection test" configs: a LocalCommand that prints and quits.
+            let lowered = option.lowercased()
+            if lowered.hasPrefix("localcommand=") || lowered.hasPrefix("permitlocalcommand=") {
+                continue
+            }
             if option.hasPrefix("UserKnownHostsFile=") {
                 let candidatePath = String(option.dropFirst("UserKnownHostsFile=".count))
                     .replacingOccurrences(of: "\"", with: "")
