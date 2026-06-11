@@ -619,3 +619,57 @@ private func waitUntil(timeout: TimeInterval, condition: @escaping @Sendable () 
     let routed = GatewayLinker.applyingGatewayProxy(to: prepared, gateways: [gw])
     #expect(routed.extraSSHOptions.contains { $0.contains("ProxyCommand=") && $0.contains("11080") })
 }
+
+@Test func forwardProbeReportsReachableForOpenServer() async throws {
+    // A plain TCP server that accepts and stays open should read as reachable.
+    let listener = try TCPTestServer()
+    defer { listener.stop() }
+    let result = ForwardProbe.probe(host: "127.0.0.1", port: listener.port, settleMilliseconds: 300)
+    #expect(result == .reachable)
+}
+
+@Test func forwardProbeReportsUnknownForClosedPort() async throws {
+    let result = ForwardProbe.probe(host: "127.0.0.1", port: 1, settleMilliseconds: 200)
+    #expect(result == .unknown)
+}
+
+@Test func configDecodesProfilesAndHooks() async throws {
+    let json = """
+    {"version":1,
+     "tunnels":[{"name":"db","host":"h","sshPort":22,"forwards":[],"serverAliveInterval":30,"serverAliveCountMax":3,"reconnectDelaySeconds":5,"enabled":true,"extraSSHOptions":[],"onConnect":"echo up","onDisconnect":"echo down"}],
+     "profiles":[{"name":"work","tunnels":["db"],"gateways":["campus"]}]}
+    """
+    let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+    #expect(config.profiles.count == 1)
+    #expect(config.profiles.first?.tunnels == ["db"])
+    #expect(config.profiles.first?.gateways == ["campus"])
+    #expect(config.tunnels.first?.onConnect == "echo up")
+    #expect(config.tunnels.first?.onDisconnect == "echo down")
+}
+
+@Test func legacyConfigWithoutProfilesStillDecodes() async throws {
+    let config = try JSONDecoder().decode(AppConfig.self, from: Data("{\"tunnels\":[]}".utf8))
+    #expect(config.profiles.isEmpty)
+}
+
+final class TCPTestServer {
+    let port: Int
+    private let fd: Int32
+    init() throws {
+        let s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
+        var yes: Int32 = 1
+        setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        addr.sin_port = 0
+        _ = withUnsafePointer(to: &addr) { p in p.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
+        listen(s, 4)
+        var bound = sockaddr_in()
+        var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+        _ = withUnsafeMutablePointer(to: &bound) { p in p.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(s, $0, &len) } }
+        self.fd = s
+        self.port = Int(UInt16(bigEndian: bound.sin_port))
+    }
+    func stop() { close(fd) }
+}

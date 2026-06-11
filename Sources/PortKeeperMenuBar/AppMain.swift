@@ -59,6 +59,7 @@ final class MenuBarViewModel: ObservableObject {
         var retryAttempt: Int = 0
         var nextRetryAt: Date? = nil
         var failedAt: Date? = nil
+        var serviceReachable: ForwardProbe.Result = .unknown
     }
 
     struct GatewayState: Identifiable {
@@ -111,6 +112,8 @@ final class MenuBarViewModel: ObservableObject {
     private static let keepRunningKey = "keepRunningAfterQuit"
     private(set) var sshConfigHosts: [SSHConfigHost] = []
 
+    private let notifier = BurrowNotifier()
+    private var serviceProbeTask: Task<Void, Never>?
     private var editorWindowController: EditorWindowController?
     private var configWatcher: ConfigFileWatcher?
     private var tasks: [String: Task<Void, Never>] = [:]
@@ -160,6 +163,74 @@ final class MenuBarViewModel: ObservableObject {
             // on a crash/SIGKILL — so this is exactly "intentional close".
             MainActor.assumeIsolated {
                 self?.performShutdownTeardown()
+            }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handleWakeFromSleep()
+            }
+        }
+        startServiceProbeLoop()
+    }
+
+    /// Sleep silently kills tunnel TCP sessions and VPN gateways; ssh keepalive
+    /// only notices after its timeout. On wake, give the network a moment to
+    /// return, then restart what should be running so it reconnects promptly.
+    private func handleWakeFromSleep() {
+        globalMessage = "Woke from sleep — reconnecting."
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard let self else { return }
+            for state in self.gateways where state.isRunning || state.connectionState == .connected {
+                if !PortProbe.canConnect(host: "127.0.0.1", port: state.config.socksPort) {
+                    self.stopGateway(named: state.id)
+                }
+            }
+            for state in self.tunnels where self.tasks[state.id] != nil {
+                self.restartTunnel(named: state.id)
+            }
+        }
+    }
+
+    /// Periodically checks whether the remote service behind each connected
+    /// tunnel is actually accepting connections (vs. just "ssh owns the port").
+    private func startServiceProbeLoop() {
+        serviceProbeTask?.cancel()
+        serviceProbeTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard let self, !Task.isCancelled else { return }
+                await self.probeConnectedServices()
+            }
+        }
+    }
+
+    private func probeConnectedServices() async {
+        let targets: [(name: String, host: String, port: Int)] = tunnels.compactMap { state in
+            guard state.connectionState == .connected,
+                  let forward = state.tunnel.forwards.first(where: { $0.kind != .remote }) else {
+                return nil
+            }
+            let host = forward.bindAddress.flatMap { $0.isEmpty ? nil : $0 } ?? "127.0.0.1"
+            return (state.id, host, forward.listenPort)
+        }
+        guard !targets.isEmpty else { return }
+
+        let results = await Task.detached { () -> [String: ForwardProbe.Result] in
+            var out: [String: ForwardProbe.Result] = [:]
+            for target in targets {
+                out[target.name] = ForwardProbe.probe(host: target.host, port: target.port)
+            }
+            return out
+        }.value
+
+        for (name, result) in results {
+            if let index = tunnels.firstIndex(where: { $0.id == name }), tunnels[index].connectionState == .connected {
+                tunnels[index].serviceReachable = result
             }
         }
     }
@@ -233,7 +304,8 @@ final class MenuBarViewModel: ObservableObject {
                     recentLogs: existingState?.recentLogs ?? [],
                     retryAttempt: isRunning ? (existingState?.retryAttempt ?? 0) : 0,
                     nextRetryAt: isRunning ? existingState?.nextRetryAt : nil,
-                    failedAt: isRunning ? nil : existingState?.failedAt
+                    failedAt: isRunning ? nil : existingState?.failedAt,
+                    serviceReachable: isRunning ? (existingState?.serviceReachable ?? .unknown) : .unknown
                 )
             }
 
@@ -478,6 +550,8 @@ final class MenuBarViewModel: ObservableObject {
     }
 
     func stopTunnel(named name: String) {
+        // Manual stop is intentional — don't let its teardown raise a problem.
+        notifier.forget(name: name)
         let task = tasks[name]
         if task == nil,
            let tunnel = tunnels.first(where: { $0.id == name })?.tunnel,
@@ -499,6 +573,66 @@ final class MenuBarViewModel: ObservableObject {
         clearRetryIndicator(for: name, resetAttempt: true)
         updateState(for: name, isRunning: false, state: .disconnected, message: "Stopping")
         globalMessage = "Stopped \(name)."
+    }
+
+    func openSSHTerminal(for name: String) {
+        guard let tunnel = tunnels.first(where: { $0.id == name })?.tunnel else {
+            globalMessage = "Tunnel '\(name)' not found."
+            return
+        }
+        do {
+            try SSHTerminalLauncher.open(tunnel: tunnel, gateways: gateways.map(\.config))
+            globalMessage = "Opening ssh to \(tunnel.host) in Terminal."
+        } catch {
+            globalMessage = "Couldn't open Terminal: \(error.localizedDescription)"
+        }
+    }
+
+    /// Copies an interactive ssh command for the host, routed through the
+    /// tunnel's VPN gateway when it has one — paste it into a terminal or hand
+    /// it to an agent to reach the server the same way the tunnel does.
+    func copySSHCommand(for name: String) {
+        guard let tunnel = tunnels.first(where: { $0.id == name })?.tunnel else {
+            globalMessage = "Tunnel '\(name)' not found."
+            return
+        }
+        let routed = GatewayLinker.applyingGatewayProxy(to: tunnel, gateways: gateways.map(\.config))
+        let command = SSHTerminalLauncher.interactiveCommand(for: routed)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
+        globalMessage = tunnel.gateway.map { "Copied ssh command (via \($0))." } ?? "Copied ssh command."
+    }
+
+    // MARK: - Profiles
+
+    var profiles: [Profile] {
+        (try? store.load().profiles) ?? []
+    }
+
+    func startProfile(named name: String) {
+        guard let profile = profiles.first(where: { $0.name == name }) else {
+            globalMessage = "Profile '\(name)' not found."
+            return
+        }
+        for gatewayName in profile.gateways {
+            startGateway(named: gatewayName)
+        }
+        let toStart = tunnels.filter { profile.tunnels.contains($0.id) }
+        startTunnels(toStart, allowPasswordPrompt: true, preloadCredentials: true)
+        globalMessage = "Starting profile \(name)."
+    }
+
+    func stopProfile(named name: String) {
+        guard let profile = profiles.first(where: { $0.name == name }) else {
+            return
+        }
+        for tunnelName in profile.tunnels {
+            stopTunnel(named: tunnelName)
+        }
+        for gatewayName in profile.gateways {
+            stopGateway(named: gatewayName)
+        }
+        globalMessage = "Stopped profile \(name)."
     }
 
     func openConfig() {
@@ -1404,6 +1538,8 @@ final class MenuBarViewModel: ObservableObject {
         guard let index = tunnels.firstIndex(where: { $0.id == name }) else {
             return
         }
+        let oldState = tunnels[index].connectionState
+        let tunnel = tunnels[index].tunnel
         tunnels[index].isRunning = isRunning
         if let state {
             tunnels[index].connectionState = state
@@ -1416,6 +1552,33 @@ final class MenuBarViewModel: ObservableObject {
             }
         }
         tunnels[index].lastMessage = message
+
+        if let state, state != oldState {
+            handleStateTransition(tunnel: tunnel, from: oldState, to: state, message: message)
+        }
+    }
+
+    /// Fires lifecycle hooks and coalesced notifications on real state edges.
+    private func handleStateTransition(tunnel: TunnelConfig, from old: ConnectionState, to new: ConnectionState, message: String) {
+        let name = tunnel.name
+        switch new {
+        case .connected where old != .connected:
+            HookRunner.run(tunnel.onConnect, event: .connected, tunnel: tunnel)
+            notifier.reportRecovery(name: name)
+        case .failed:
+            if old == .connected {
+                HookRunner.run(tunnel.onDisconnect, event: .disconnected, tunnel: tunnel)
+                notifier.reportProblem(name: name, reason: message)
+            } else if message.localizedCaseInsensitiveContains("authentication failed")
+                || message.localizedCaseInsensitiveContains("permission denied") {
+                notifier.reportProblem(name: name, reason: message)
+            }
+        case .disconnected where old == .connected:
+            HookRunner.run(tunnel.onDisconnect, event: .disconnected, tunnel: tunnel)
+            notifier.forget(name: name)
+        default:
+            break
+        }
     }
 
     fileprivate func appendLog(for name: String, message: String) {
@@ -1735,7 +1898,9 @@ struct MenuBarContent: View {
                                                 onDuplicate: { viewModel.duplicateTunnel(named: tunnel.id) },
                                                 onDelete: { viewModel.deleteTunnel(named: tunnel.id) },
                                                 onToggleAutoConnect: { viewModel.setAutoConnect(named: tunnel.id, enabled: $0) },
-                                                onSetGateway: { viewModel.setGateway($0, forTunnels: [tunnel.id]) }
+                                                onSetGateway: { viewModel.setGateway($0, forTunnels: [tunnel.id]) },
+                                                onOpenSSH: { viewModel.openSSHTerminal(for: tunnel.id) },
+                                                onCopySSH: { viewModel.copySSHCommand(for: tunnel.id) }
                                             )
                                         }
                                     }
@@ -1870,6 +2035,16 @@ struct MenuBarContent: View {
                 Menu {
                     Button("New VPN Gateway…", action: viewModel.createGateway)
                     Button("Import from SSH Config…", action: viewModel.beginSSHConfigImport)
+                    let profiles = viewModel.profiles
+                    if !profiles.isEmpty {
+                        Menu("Profiles") {
+                            ForEach(profiles) { profile in
+                                Button("Start \(profile.name)") { viewModel.startProfile(named: profile.name) }
+                                Button("Stop \(profile.name)") { viewModel.stopProfile(named: profile.name) }
+                                Divider()
+                            }
+                        }
+                    }
                     Toggle("Start at Login", isOn: Binding(
                         get: { viewModel.launchAtLoginEnabled },
                         set: { viewModel.setLaunchAtLogin($0) }
@@ -2339,6 +2514,9 @@ private struct GatewayRow: View {
                 }
             }
             Divider()
+            Button("Copy ssh-via-VPN Command") {
+                copy("ssh -o ProxyCommand='\(GatewayLinker.proxyCommand(for: gateway.config))' USER@HOST")
+            }
             Button("Copy SOCKS Address") {
                 copy("127.0.0.1:\(gateway.config.socksPort)")
             }
@@ -2391,6 +2569,8 @@ struct TunnelRow: View {
     let onDelete: () -> Void
     let onToggleAutoConnect: (Bool) -> Void
     var onSetGateway: (String?) -> Void = { _ in }
+    var onOpenSSH: () -> Void = {}
+    var onCopySSH: () -> Void = {}
     @State private var isIdentityTooltipVisible = false
     @State private var isDetailsPresented = false
     @State private var isAutoHovered = false
@@ -2546,6 +2726,13 @@ struct TunnelRow: View {
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary.opacity(0.45))
                     .lineLimit(1)
+            }
+            if tunnel.connectionState == .connected, case .unreachable = tunnel.serviceReachable {
+                Text(verbatim: "· service down")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.orange.opacity(0.9))
+                    .lineLimit(1)
+                    .help("Tunnel is up, but the remote service isn't accepting connections.")
             }
         }
     }
@@ -2750,6 +2937,9 @@ struct TunnelRow: View {
                     }
                 }
             }
+            Divider()
+            Button("Open SSH in Terminal", action: onOpenSSH)
+            Button("Copy ssh Command", action: onCopySSH)
             Divider()
             Button("Restart", action: onRestart)
             Button("Edit", action: onEdit)
@@ -3078,7 +3268,11 @@ private struct TunnelDetailsPopover: View {
     private var probeText: String {
         switch tunnel.connectionState {
         case .connected:
-            return "local forward reachable"
+            switch tunnel.serviceReachable {
+            case .reachable: return "service reachable"
+            case .unreachable: return "tunnel up, service not responding"
+            case .unknown: return "local forward reachable"
+            }
         case .connecting:
             return "checking local forward"
         case .failed:

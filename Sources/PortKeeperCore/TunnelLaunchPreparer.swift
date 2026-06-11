@@ -61,7 +61,9 @@ public enum TunnelLaunchPreparer {
             reconnectDelaySeconds: tunnel.reconnectDelaySeconds,
             enabled: tunnel.enabled,
             extraSSHOptions: updatedOptions,
-            gateway: tunnel.gateway
+            gateway: tunnel.gateway,
+            onConnect: tunnel.onConnect,
+            onDisconnect: tunnel.onDisconnect
         )
     }
 }

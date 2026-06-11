@@ -4,11 +4,13 @@ public struct AppConfig: Codable, Sendable {
     public var version: Int
     public var tunnels: [TunnelConfig]
     public var gateways: [GatewayConfig]
+    public var profiles: [Profile]
 
-    public init(version: Int = 1, tunnels: [TunnelConfig] = [], gateways: [GatewayConfig] = []) {
+    public init(version: Int = 1, tunnels: [TunnelConfig] = [], gateways: [GatewayConfig] = [], profiles: [Profile] = []) {
         self.version = version
         self.tunnels = tunnels
         self.gateways = gateways
+        self.profiles = profiles
     }
 
     public init(from decoder: Decoder) throws {
@@ -16,6 +18,28 @@ public struct AppConfig: Codable, Sendable {
         self.version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
         self.tunnels = try container.decodeIfPresent([TunnelConfig].self, forKey: .tunnels) ?? []
         self.gateways = try container.decodeIfPresent([GatewayConfig].self, forKey: .gateways) ?? []
+        self.profiles = try container.decodeIfPresent([Profile].self, forKey: .profiles) ?? []
+    }
+}
+
+/// A named bundle of tunnels (and gateways) started/stopped together.
+public struct Profile: Codable, Sendable, Identifiable, Equatable {
+    public var id: String { name }
+    public var name: String
+    public var tunnels: [String]
+    public var gateways: [String]
+
+    public init(name: String, tunnels: [String] = [], gateways: [String] = []) {
+        self.name = name
+        self.tunnels = tunnels
+        self.gateways = gateways
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.tunnels = try container.decodeIfPresent([String].self, forKey: .tunnels) ?? []
+        self.gateways = try container.decodeIfPresent([String].self, forKey: .gateways) ?? []
     }
 }
 
@@ -107,6 +131,11 @@ public struct TunnelConfig: Codable, Sendable, Identifiable {
     public var extraSSHOptions: [String]
     /// Name of the GatewayConfig this tunnel connects through, if any.
     public var gateway: String?
+    /// Shell command run when the tunnel becomes connected, with env vars
+    /// BURROW_TUNNEL, BURROW_HOST, BURROW_LOCAL_PORT, BURROW_EVENT set.
+    public var onConnect: String?
+    /// Shell command run when the tunnel disconnects/fails.
+    public var onDisconnect: String?
 
     public init(
         name: String,
@@ -121,7 +150,9 @@ public struct TunnelConfig: Codable, Sendable, Identifiable {
         reconnectDelaySeconds: Int = 5,
         enabled: Bool = true,
         extraSSHOptions: [String] = [],
-        gateway: String? = nil
+        gateway: String? = nil,
+        onConnect: String? = nil,
+        onDisconnect: String? = nil
     ) {
         self.name = name
         self.host = host
@@ -136,6 +167,8 @@ public struct TunnelConfig: Codable, Sendable, Identifiable {
         self.enabled = enabled
         self.extraSSHOptions = extraSSHOptions
         self.gateway = gateway
+        self.onConnect = onConnect
+        self.onDisconnect = onDisconnect
     }
 }
 
