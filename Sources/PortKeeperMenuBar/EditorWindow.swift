@@ -69,8 +69,9 @@ private struct EditorWindowContent: View {
             if let profileDraft = viewModel.profileDraft {
                 ProfileEditorSheet(
                     draft: profileBinding(for: profileDraft),
-                    tunnelNames: viewModel.tunnels.map(\.id),
+                    tunnels: viewModel.tunnels.map(\.tunnel),
                     gatewayNames: viewModel.gateways.map(\.id),
+                    existingProfileNames: viewModel.profiles.map(\.name),
                     onCancel: { viewModel.closeProfileEditor() },
                     onSave: { viewModel.saveProfileEditor() },
                     onDelete: { viewModel.deleteProfileEditorTarget() }
