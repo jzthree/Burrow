@@ -2147,6 +2147,7 @@ struct MenuBarContent: View {
                 Divider()
 
                 // Manage (day-to-day profile start/stop lives in the chips)
+                Button("New VPN Gateway…", action: viewModel.createGateway)
                 Menu("Profiles") {
                     Button("New Profile…", action: viewModel.createProfile)
                     let profiles = viewModel.profiles
@@ -2204,19 +2205,15 @@ struct MenuBarContent: View {
 
             Spacer()
 
-            // One create button: click = New Tunnel (the common case),
-            // menu holds the occasional creates.
-            Menu {
-                Button("New VPN Gateway…", action: viewModel.createGateway)
-                Button("New Profile…", action: viewModel.createProfile)
+            // The one prominent action; other creates live in Settings and on
+            // the section headers' + buttons.
+            Button {
+                viewModel.createTunnel()
             } label: {
                 Label("New Tunnel", systemImage: "plus")
-            } primaryAction: {
-                viewModel.createTunnel()
             }
             .buttonStyle(.borderedProminent)
             .tint(.burrowPrimaryButton)
-            .fixedSize()
         }
         .controlSize(.small)
     }
@@ -3139,12 +3136,12 @@ struct TunnelRow: View {
             if !copyableForwards.isEmpty {
                 Divider()
                 ForEach(Array(copyableForwards.enumerated()), id: \.offset) { _, forward in
-                    Button("Copy \(localAddress(for: forward))") {
+                    Button("Copy “\(localAddress(for: forward))”") {
                         copyToPasteboard(localAddress(for: forward))
                     }
                 }
                 ForEach(Array(browsableForwards.enumerated()), id: \.offset) { _, forward in
-                    Button("Open http://\(localAddress(for: forward))") {
+                    Button("Open “\(localAddress(for: forward))” in Browser") {
                         if let url = URL(string: "http://\(localAddress(for: forward))") {
                             NSWorkspace.shared.open(url)
                         }
