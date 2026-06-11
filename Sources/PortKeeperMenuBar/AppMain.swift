@@ -2099,14 +2099,14 @@ struct MenuBarContent: View {
             let tunnelCount = CGFloat(group.tunnels.count)
             let dividerHeight = CGFloat(max(group.tunnels.count - 1, 0))
             let groupHeaderAndSpacing: CGFloat = 32
-            let rowHeight: CGFloat = 54
+            let rowHeight: CGFloat = 56
             let interGroupSpacing: CGFloat = 10
             return total + groupHeaderAndSpacing + (tunnelCount * rowHeight) + dividerHeight + interGroupSpacing
         }
 
         let gatewaysHeight: CGFloat = viewModel.gateways.isEmpty
             ? 0
-            : 32 + CGFloat(viewModel.gateways.count) * 54 + CGFloat(max(viewModel.gateways.count - 1, 0)) + 10
+            : 32 + CGFloat(viewModel.gateways.count) * 56 + CGFloat(max(viewModel.gateways.count - 1, 0)) + 10
 
         let profileChipsHeight: CGFloat = viewModel.profiles.isEmpty ? 0 : 40
 
@@ -2132,7 +2132,8 @@ struct MenuBarContent: View {
                 .font(.system(size: 11.2, weight: .semibold))
                 .foregroundStyle(.secondary.opacity(0.86))
                 .lineLimit(1)
-                .truncationMode(.middle)
+                .truncationMode(.tail)
+                .help(viewModel.globalMessage)
         }
     }
 
@@ -2715,8 +2716,8 @@ private struct GatewayRow: View {
             }
             .frame(width: 100, alignment: .trailing)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     @ViewBuilder
@@ -2729,11 +2730,11 @@ private struct GatewayRow: View {
                     .foregroundStyle(isPrimaryHovered ? Color.burrowFailure : Color.primary.opacity(0.82))
                     .background(
                         Capsule(style: .continuous)
-                            .fill(isPrimaryHovered ? Color.red.opacity(0.10) : Color.primary.opacity(0.05))
+                            .fill(isPrimaryHovered ? Color.red.opacity(0.10) : Color(nsColor: .windowBackgroundColor))
                     )
                     .overlay(
                         Capsule(style: .continuous)
-                            .stroke(isPrimaryHovered ? Color.burrowFailure.opacity(0.35) : Color.primary.opacity(0.12), lineWidth: 1)
+                            .stroke(isPrimaryHovered ? Color.burrowFailure.opacity(0.35) : Color.primary.opacity(0.16), lineWidth: 1)
                     )
             }
             .buttonStyle(CompactPressButtonStyle())
@@ -2894,8 +2895,8 @@ struct TunnelRow: View {
             .frame(width: 134, alignment: .trailing)
             .layoutPriority(2)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     private var statusIndicator: some View {
@@ -2958,49 +2959,74 @@ struct TunnelRow: View {
         .frame(maxWidth: 330, alignment: .leading)
     }
 
-    @ViewBuilder
-    private var routeSummaryView: some View {
-        if tunnel.tunnel.forwards.count == 1, let forward = tunnel.tunnel.forwards.first {
-            routeView(for: forward)
-                .help(fullRouteText(for: forward))
-        } else {
-            Text(verbatim: compactRouteSummary)
-                .font(.system(size: 11.2, weight: .medium, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(.secondary.opacity(0.95))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .help(fullRouteSummary)
-        }
-    }
-
     /// How long a stopped tunnel keeps showing its failure diagnosis before the
     /// row reverts to the route; the diagnosis stays in the hover card and Details.
     private static let failureDisplayWindow: TimeInterval = 60
 
     private var routeWithSSHSuffix: some View {
-        HStack(spacing: 6) {
-            routeSummaryView
-            if tunnel.tunnel.sshPort != 22 {
-                Text(verbatim: "· ssh :\(String(tunnel.tunnel.sshPort))")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary.opacity(0.45))
-                    .lineLimit(1)
+        HStack(spacing: 7) {
+            if let chipForward = leadingChipForward {
+                CopyPortChip(label: String(chipForward.listenPort), address: localAddress(for: chipForward))
             }
-            if let gatewayName = tunnel.tunnel.gateway {
-                Text(verbatim: "· via \(gatewayName)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary.opacity(0.45))
-                    .lineLimit(1)
-            }
-            if tunnel.connectionState == .connected, case .unreachable = tunnel.serviceReachable {
-                Text(verbatim: "· service down")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.orange.opacity(0.9))
-                    .lineLimit(1)
-                    .help("Tunnel is up, but the remote service isn't accepting connections.")
-            }
+            routeDetailText
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
+        .help(fullRouteSummary)
+    }
+
+    /// The single-forward listen port renders as the copyable chip.
+    private var leadingChipForward: ForwardSpec? {
+        guard tunnel.tunnel.forwards.count == 1,
+              let forward = tunnel.tunnel.forwards.first,
+              forward.kind != .remote else {
+            return nil
+        }
+        return forward
+    }
+
+    /// The whole detail line as ONE Text so tail truncation trims the
+    /// least-important trailing parts first. Separate views compress equally
+    /// under width pressure, which used to truncate even the destination into
+    /// "…" while suffixes survived.
+    private var routeDetailText: Text {
+        let routeFont = Font.system(size: 11.2, weight: .medium, design: .monospaced)
+        let suffixFont = Font.system(size: 10, weight: .medium, design: .monospaced)
+        let routeColor = Color.secondary.opacity(0.95)
+        let suffixColor = Color.secondary.opacity(0.45)
+
+        var text: Text
+        if tunnel.tunnel.forwards.count == 1, let forward = tunnel.tunnel.forwards.first {
+            switch forward.kind {
+            case .local:
+                text = Text(verbatim: "› \(compactDestinationText(for: forward))")
+                    .font(routeFont).foregroundColor(routeColor)
+            case .dynamic:
+                text = Text(verbatim: "· SOCKS")
+                    .font(routeFont).foregroundColor(routeColor)
+            case .remote:
+                text = Text(verbatim: "\(compactDestinationText(for: forward)) ‹ \(String(forward.listenPort))")
+                    .font(routeFont).foregroundColor(routeColor)
+            }
+        } else {
+            text = Text(verbatim: compactRouteSummary)
+                .font(routeFont).foregroundColor(routeColor)
+        }
+
+        if tunnel.connectionState == .connected, case .unreachable = tunnel.serviceReachable {
+            text = text + Text(verbatim: "  ·  service down")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundColor(.orange.opacity(0.9))
+        }
+        if let gatewayName = tunnel.tunnel.gateway {
+            text = text + Text(verbatim: "  ·  via \(gatewayName)")
+                .font(suffixFont).foregroundColor(suffixColor)
+        }
+        if tunnel.tunnel.sshPort != 22 {
+            text = text + Text(verbatim: "  ·  ssh :\(String(tunnel.tunnel.sshPort))")
+                .font(suffixFont).foregroundColor(suffixColor)
+        }
+        return text
     }
 
     private var failureStatusView: some View {
@@ -3044,66 +3070,6 @@ struct TunnelRow: View {
         return detail.lowercased() == category.lowercased() ? category : detail
     }
 
-    @ViewBuilder
-    private func routeView(for forward: ForwardSpec) -> some View {
-        switch forward.kind {
-        case .local:
-            routeLine(
-                first: String(forward.listenPort),
-                second: compactDestinationText(for: forward),
-                arrow: "chevron.right",
-                copyAddress: localAddress(for: forward)
-            )
-        case .remote:
-            routeLine(
-                first: compactDestinationText(for: forward),
-                second: String(forward.listenPort),
-                arrow: "chevron.left",
-                copyAddress: nil
-            )
-        case .dynamic:
-            HStack(spacing: 4) {
-                Text(verbatim: "SOCKS")
-                    .font(.system(size: 11.2, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary.opacity(0.95))
-                CopyPortChip(label: String(forward.listenPort), address: localAddress(for: forward))
-            }
-            .lineLimit(1)
-        }
-    }
-
-    private func routeLine(first: String, second: String, arrow: String, copyAddress: String?) -> some View {
-        HStack(spacing: 7) {
-            if let copyAddress {
-                CopyPortChip(label: first, address: copyAddress)
-            } else {
-                Text(verbatim: first)
-                    .font(.system(size: 11.2, weight: .bold, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary.opacity(0.95))
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(.horizontal, 6)
-                    .frame(height: 21)
-                    .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(Color.secondary.opacity(0.065))
-                    )
-            }
-
-            Image(systemName: arrow)
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(.tertiary)
-
-            Text(verbatim: second)
-                .font(.system(size: 11.2, weight: .semibold, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(.secondary.opacity(0.88))
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-    }
-
     private func localAddress(for forward: ForwardSpec) -> String {
         let bind = forward.bindAddress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let host = bind.isEmpty || isLoopbackHost(bind) || bind == "*" || bind == "0.0.0.0" ? "localhost" : bind
@@ -3131,21 +3097,6 @@ struct TunnelRow: View {
             return destinationPort
         }
         return "\(destinationHost):\(destinationPort)"
-    }
-
-    private func fullRouteText(for forward: ForwardSpec) -> String {
-        switch forward.kind {
-        case .local:
-            let destinationHost = forward.destinationHost ?? "?"
-            let destinationPort = forward.destinationPort.map(String.init) ?? "?"
-            return "\(String(forward.listenPort)) -> \(destinationHost):\(destinationPort) @ \(endpointText)"
-        case .remote:
-            let destinationHost = forward.destinationHost ?? "?"
-            let destinationPort = forward.destinationPort.map(String.init) ?? "?"
-            return "\(destinationHost):\(destinationPort) <- \(String(forward.listenPort)) @ \(endpointText)"
-        case .dynamic:
-            return "SOCKS \(String(forward.listenPort)) @ \(endpointText)"
-        }
     }
 
     private func isLoopbackHost(_ host: String) -> Bool {
@@ -3286,11 +3237,11 @@ struct TunnelRow: View {
                     .foregroundStyle(isPrimaryHovered ? Color.burrowFailure : Color.primary.opacity(0.82))
                     .background(
                         Capsule(style: .continuous)
-                            .fill(isPrimaryHovered ? Color.red.opacity(0.10) : Color.primary.opacity(0.05))
+                            .fill(isPrimaryHovered ? Color.red.opacity(0.10) : Color(nsColor: .windowBackgroundColor))
                     )
                     .overlay(
                         Capsule(style: .continuous)
-                            .stroke(isPrimaryHovered ? Color.burrowFailure.opacity(0.35) : Color.primary.opacity(0.12), lineWidth: 1)
+                            .stroke(isPrimaryHovered ? Color.burrowFailure.opacity(0.35) : Color.primary.opacity(0.16), lineWidth: 1)
                     )
                     .scaleEffect(isPrimaryHovered ? 1.015 : 1.0)
             }
