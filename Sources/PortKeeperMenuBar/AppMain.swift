@@ -2098,8 +2098,7 @@ struct MenuBarContent: View {
 
             HStack(spacing: 8) {
                 Menu {
-                    Button("New VPN Gateway…", action: viewModel.createGateway)
-                    Button("Import from SSH Config…", action: viewModel.beginSSHConfigImport)
+                    // Manage
                     Menu("Profiles") {
                         Button("New Profile…", action: viewModel.createProfile)
                         let profiles = viewModel.profiles
@@ -2115,26 +2114,39 @@ struct MenuBarContent: View {
                             }
                         }
                     }
+                    Button("Import Tunnels from SSH Config…", action: viewModel.beginSSHConfigImport)
+
+                    Divider()
+
+                    // Preferences
                     Toggle("Start at Login", isOn: Binding(
                         get: { viewModel.launchAtLoginEnabled },
                         set: { viewModel.setLaunchAtLogin($0) }
                     ))
-                    Toggle("Keep VPN & Tunnels Running After Quit", isOn: Binding(
+                    Toggle("Keep Running After Quit", isOn: Binding(
                         get: { viewModel.keepRunningAfterQuit },
                         set: { viewModel.keepRunningAfterQuit = $0 }
                     ))
-                    if viewModel.hasSSHInclude {
-                        Button("Copy SSH Config Include Line") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString("Include \"\(viewModel.sshIncludePath)\"", forType: .string)
-                            viewModel.globalMessage = "Copied — paste at the top of ~/.ssh/config to route hosts through gateways."
+
+                    Divider()
+
+                    // Config file
+                    Menu("Config File") {
+                        Button("Reload", action: viewModel.reloadConfig)
+                        Button("Edit JSON…", action: viewModel.openConfig)
+                        Button("Reveal in Finder", action: viewModel.revealConfigFolder)
+                        if viewModel.hasSSHInclude {
+                            Divider()
+                            Button("Copy SSH Config Include Line") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString("Include \"\(viewModel.sshIncludePath)\"", forType: .string)
+                                viewModel.globalMessage = "Copied — paste at the top of ~/.ssh/config to route hosts through gateways."
+                            }
                         }
                     }
+
                     Divider()
-                    Button("Reload", action: viewModel.reloadConfig)
-                    Button("Edit JSON", action: viewModel.openConfig)
-                    Button("Reveal File", action: viewModel.revealConfigFolder)
-                    Divider()
+
                     Button("Quit Burrow") {
                         viewModel.quit()
                     }
