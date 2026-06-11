@@ -885,11 +885,18 @@ final class MenuBarViewModel: ObservableObject {
                     return true
                 }
                 // The IdP session persists in the web view, so sign-in usually
-                // completes silently: connects show no window unless needed,
-                // and headless auto-starts never show one at all.
+                // completes silently. A user-initiated connect (or auto-reconnect
+                // after a drop) reveals the sign-in window only if the session has
+                // actually expired (a login form appears) or after a generous
+                // fallback; a headless launch auto-start never shows a window and
+                // falls back to "click Connect".
+                // Both paths try silently first and reveal the sign-in window
+                // only when the IdP needs a real interaction (e.g. an Entra
+                // account picker). Launch auto-start uses a longer silent grace
+                // so a quick valid session stays fully invisible.
                 let policy: GPSAMLAuthenticator.InteractionPolicy = allowPasswordPrompt
-                    ? .showAfter(2.5)
-                    : .silentOnly(45)
+                    ? .showAfter(12)
+                    : .showAfter(20)
                 updateGatewayState(for: name, isRunning: false, state: .connecting, message: "Signing in (SAML)")
                 let authenticator = GPSAMLAuthenticator(gateway: gateway)
                 activeSAMLAuthenticators[name] = authenticator
@@ -1179,14 +1186,19 @@ final class MenuBarViewModel: ObservableObject {
             return
         }
 
-        samlReauthAttempts[name, default: 0] += 1
+        let attempt = samlReauthAttempts[name, default: 0] + 1
+        samlReauthAttempts[name] = attempt
         globalMessage = "Gateway \(name) dropped — signing in again."
+        // Progressive backoff so a flapping network doesn't hammer the IdP.
+        let backoff = min(2 * attempt, 15)
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: .seconds(backoff))
             guard let self, self.gatewayTasks[name] == nil, self.activeSAMLAuthenticators[name] == nil else {
                 return
             }
-            self.startGateway(named: name)
+            // allowPasswordPrompt: true uses the interactive policy, so a stale
+            // IdP session reveals the sign-in window instead of silently failing.
+            self.startGateway(named: name, allowPasswordPrompt: true)
         }
     }
 
