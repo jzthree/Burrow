@@ -299,11 +299,14 @@ public enum GatewayPortReclaimer {
         ps.standardError = Pipe()
         do {
             try ps.run()
-            ps.waitUntilExit()
         } catch {
             return []
         }
+        // Drain before waiting: ps output (full argv of every process) easily
+        // exceeds the 64KB pipe buffer, and an undrained pipe deadlocks
+        // waitUntilExit against the blocked writer.
         let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        ps.waitUntilExit()
         var pids: [pid_t] = []
         for line in output.split(whereSeparator: \.isNewline) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -327,11 +330,11 @@ public enum GatewayPortReclaimer {
         lsof.standardError = Pipe()
         do {
             try lsof.run()
-            lsof.waitUntilExit()
         } catch {
             return []
         }
         let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        lsof.waitUntilExit()
         return output.split(whereSeparator: \.isNewline).compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }
     }
 
@@ -344,12 +347,12 @@ public enum GatewayPortReclaimer {
         ps.standardError = Pipe()
         do {
             try ps.run()
-            ps.waitUntilExit()
         } catch {
             return nil
         }
         let name = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        ps.waitUntilExit()
         return (name?.isEmpty ?? true) ? nil : name
     }
 }
