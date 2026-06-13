@@ -241,14 +241,25 @@ final class MenuBarViewModel: ObservableObject {
     private func probeConnectedServices() async {
         // Adopted gateways have no supervisor watching them; notice here when
         // their session ends so the menu doesn't show a dead VPN as connected.
-        for name in Array(adoptedGateways) {
-            guard let state = gateways.first(where: { $0.id == name }) else {
+        // openconnect can exit while its ocproxy child lingers holding the
+        // SOCKS port — that orphan answers a plain port check but routes
+        // nowhere, so liveness must confirm openconnect itself is alive.
+        let adopted = Array(adoptedGateways).compactMap { name in
+            gateways.first(where: { $0.id == name }).map { (name: name, config: $0.config) }
+        }
+        if !adopted.isEmpty {
+            let dead = await Task.detached { () -> [String] in
+                adopted.filter { !GatewayPortReclaimer.hasLiveSession(socksPort: $0.config.socksPort, server: $0.config.server) }
+                    .map(\.name)
+            }.value
+            for name in dead {
                 adoptedGateways.remove(name)
-                continue
-            }
-            if !PortProbe.canConnect(host: "127.0.0.1", port: state.config.socksPort) {
-                adoptedGateways.remove(name)
-                updateGatewayState(for: name, isRunning: false, state: .disconnected, message: "VPN session ended")
+                if let config = gateways.first(where: { $0.id == name })?.config {
+                    // Reap the orphaned ocproxy so the stale port stops
+                    // masquerading as a working tunnel.
+                    GatewayPortReclaimer.reclaimStaleListeners(port: config.socksPort)
+                }
+                updateGatewayState(for: name, isRunning: false, state: .disconnected, message: "VPN session ended — reconnect")
             }
         }
 
